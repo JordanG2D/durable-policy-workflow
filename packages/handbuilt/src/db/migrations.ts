@@ -83,4 +83,17 @@ export const MIGRATIONS: readonly { readonly id: number; readonly name: string; 
       CREATE SEQUENCE policy_number_seq START 100000;
     `,
   },
+  {
+    id: 2,
+    name: "durable synthetic AWS demo effects",
+    sql: /* sql */ `
+      CREATE TABLE aws_demo_effects (
+        kind text NOT NULL,
+        idempotency_key text NOT NULL,
+        request_hash text NOT NULL,
+        result jsonb NOT NULL,
+        PRIMARY KEY (kind, idempotency_key)
+      );
+    `,
+  },
 ];
