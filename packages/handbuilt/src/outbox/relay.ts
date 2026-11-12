@@ -3,12 +3,13 @@ import { hostname } from "node:os";
 import { setTimeout as sleep } from "node:timers/promises";
 import { SpanStatusCode } from "@opentelemetry/api";
 import { withTransaction, type Pool, type Tx } from "../db/pool.js";
-import { LeaseLostError, errorMessage, isRetryable } from "../domain/errors.js";
-import { decideRetry, type RetryPolicy } from "../domain/retryPolicy.js";
-import { noCrash, type CrashHook } from "../faults/crash.js";
-import type { Logger } from "../observability/logger.js";
+import { errorMessage, isRetryable } from "@policy/domain/errors";
+import { LeaseLostError } from "./errors.js";
+import { decideRetry, type RetryPolicy } from "./retryPolicy.js";
+import { noCrash, type CrashHook } from "@policy/domain/crash";
+import type { Logger } from "@policy/domain/logger";
 import type { Metrics } from "../observability/metrics.js";
-import { contextFromTraceParent, tracer } from "../observability/tracing.js";
+import { contextFromTraceParent, tracer } from "@policy/domain/tracing";
 import {
   claimBatch,
   completeWithFence,

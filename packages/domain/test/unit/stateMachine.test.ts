@@ -9,7 +9,7 @@ import {
   nextState,
   progressOf,
   type WorkflowState,
-} from "../../src/domain/stateMachine.js";
+} from "../../src/stateMachine.js";
 
 const happyPath: WorkflowState[] = [
   "QUOTE_REQUESTED",

@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "../../src/app.js";
-import { createLogger } from "../../src/observability/logger.js";
-import { priceQuote } from "../../src/domain/pricing.js";
+import { createLogger } from "@policy/domain/logger";
+import { priceQuote } from "@policy/domain/pricing";
 import { sampleApplication } from "../helpers/db.js";
 import {
   HAPPY_PATH,

@@ -1,5 +1,5 @@
-import { NonRetryableError, RetryableError } from "../domain/errors.js";
-import { traceHeaders } from "../observability/tracing.js";
+import { NonRetryableError, RetryableError } from "../errors.js";
+import { traceHeaders } from "../tracing.js";
 
 /**
  * POST JSON with a hard timeout and failure classification:

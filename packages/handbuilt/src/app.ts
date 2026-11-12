@@ -4,14 +4,14 @@ import {
   httpPaymentGateway,
   type DocumentGateway,
   type PaymentGateway,
-} from "./clients/gateways.js";
+} from "@policy/domain/clients/gateways";
 import type { Config } from "./config.js";
 import { createPool, type Pool } from "./db/pool.js";
 import { migrate } from "./db/migrate.js";
-import { rulePricing, type PricingEngine } from "./domain/pricing.js";
-import type { CrashHook } from "./faults/crash.js";
+import { rulePricing, type PricingEngine } from "@policy/domain/pricing";
+import type { CrashHook } from "@policy/domain/crash";
 import { buildServer } from "./http/server.js";
-import { createLogger, type Logger } from "./observability/logger.js";
+import { createLogger, type Logger } from "@policy/domain/logger";
 import { createMetrics, registerOutboxGauges, type Metrics } from "./observability/metrics.js";
 import { Relay } from "./outbox/relay.js";
 import { createDeadLetterHandler, createStepHandlers } from "./workflow/steps.js";

@@ -1,0 +1,28 @@
+{
+  "name": "@policy/domain",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "description": "Shared by both implementations: domain types, pricing, state machine, error taxonomy, fake providers, HTTP clients, tracing.",
+  "exports": {
+    "./*": {
+      "types": "./src/*.ts",
+      "source": "./src/*.ts",
+      "default": "./dist/src/*.js"
+    }
+  },
+  "scripts": {
+    "fakes": "tsx --conditions=source src/fakes/main.ts"
+  },
+  "dependencies": {
+    "@opentelemetry/api": "~1.9.1",
+    "@opentelemetry/core": "^2.12.1",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.223.1",
+    "@opentelemetry/resources": "^2.12.1",
+    "@opentelemetry/sdk-trace-base": "^2.12.1",
+    "@opentelemetry/sdk-trace-node": "^2.12.1",
+    "fastify": "^5.12.8",
+    "pino": "^10.4.0"
+  }
+}

@@ -1,4 +1,11 @@
 {
   "files": [],
-  "references": [{ "path": "packages/handbuilt" }]
+  "references": [
+    {
+      "path": "packages/domain"
+    },
+    {
+      "path": "packages/handbuilt"
+    }
+  ]
 }

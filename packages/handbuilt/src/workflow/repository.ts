@@ -1,16 +1,16 @@
 import type { Pool, Tx } from "../db/pool.js";
-import { ConcurrentStateChangeError } from "../domain/errors.js";
+import { ConcurrentStateChangeError } from "../outbox/errors.js";
 import {
   IllegalTransitionError,
   assertTransition,
   isWorkflowState,
   type WorkflowState,
-} from "../domain/stateMachine.js";
-import type { Logger } from "../observability/logger.js";
+} from "@policy/domain/stateMachine";
+import type { Logger } from "@policy/domain/logger";
 import type { Metrics } from "../observability/metrics.js";
-import { traceParentOf } from "../observability/tracing.js";
+import { traceParentOf } from "@policy/domain/tracing";
 import { enqueue } from "../outbox/outbox.js";
-import type { PolicyApplication } from "../domain/pricing.js";
+import type { PolicyApplication } from "@policy/domain/pricing";
 
 export interface Workflow {
   readonly id: string;

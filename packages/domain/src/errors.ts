@@ -15,20 +15,6 @@ export class NonRetryableError extends Error {
   readonly retryable = false;
 }
 
-/** The workflow row was changed by someone else between read and write. */
-export class ConcurrentStateChangeError extends RetryableError {
-  override readonly name = "ConcurrentStateChangeError";
-}
-
-/**
- * This worker's outbox lease was taken over (it expired and another worker
- * reclaimed the row). The step's result must be discarded; the new owner is
- * responsible for the row now.
- */
-export class LeaseLostError extends Error {
-  override readonly name = "LeaseLostError";
-}
-
 export function isRetryable(err: unknown): boolean {
   if (err instanceof NonRetryableError) return false;
   if (err instanceof Error && err.name === "IllegalTransitionError") return false;

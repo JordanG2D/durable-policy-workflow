@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { withTransaction } from "../../src/db/pool.js";
-import { silentLogger } from "../../src/observability/logger.js";
+import { silentLogger } from "@policy/domain/logger";
 import { createMetrics } from "../../src/observability/metrics.js";
 import { enqueue } from "../../src/outbox/outbox.js";
 import { getWorkflow, lockWorkflow, transition } from "../../src/workflow/repository.js";

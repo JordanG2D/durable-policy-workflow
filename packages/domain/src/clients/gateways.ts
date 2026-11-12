@@ -1,4 +1,4 @@
-import { inSpan } from "../observability/tracing.js";
+import { inSpan } from "../tracing.js";
 import { postJson } from "./http.js";
 
 export interface ChargeRequest {

@@ -124,7 +124,7 @@ describe("fault: payment permanently failing", () => {
 
 describe("fault: transient pricing failure", () => {
   it("retries the pricing step and completes", async () => {
-    const { flakyPricing } = await import("../../src/domain/pricing.js");
+    const { flakyPricing } = await import("@policy/domain/pricing");
     const worker = await h.startWorker({}, { pricing: flakyPricing(2) });
     const id = await startWorkflow(h.apiUrl);
     await waitForState(h.pool, id, "DOCUMENTS_DELIVERED");

@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { createPool, withTransaction, type Pool } from "../../src/db/pool.js";
 import { migrate } from "../../src/db/migrate.js";
-import type { PolicyApplication } from "../../src/domain/pricing.js";
+import type { PolicyApplication } from "@policy/domain/pricing";
 import { insertWorkflow } from "../../src/workflow/repository.js";
 
 export const TEST_DATABASE_URL =

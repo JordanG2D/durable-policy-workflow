@@ -1,4 +1,4 @@
-import { validateRetryPolicy, type RetryPolicy } from "./domain/retryPolicy.js";
+import { validateRetryPolicy, type RetryPolicy } from "./outbox/retryPolicy.js";
 
 export type Role = "api" | "worker" | "all";
 

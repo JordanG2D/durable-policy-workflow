@@ -6,7 +6,7 @@ import {
   decideRetry,
   validateRetryPolicy,
   type RetryPolicy,
-} from "../../src/domain/retryPolicy.js";
+} from "../../src/outbox/retryPolicy.js";
 
 const policy: RetryPolicy = { maxAttempts: 5, baseDelayMs: 100, maxDelayMs: 1_000 };
 const retryable = { message: "HTTP 500", retryable: true };

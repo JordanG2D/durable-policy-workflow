@@ -5,12 +5,12 @@ import { InMemorySpanExporter } from "@opentelemetry/sdk-trace-base";
 import { createApp, type App, type AppOverrides } from "../../src/app.js";
 import type { Config } from "../../src/config.js";
 import type { Pool } from "../../src/db/pool.js";
-import { createFakeDocumentService, type FakeDocumentService } from "../../src/fakes/documentService.js";
-import { createFakePaymentProvider, type FakePaymentProvider } from "../../src/fakes/paymentProvider.js";
-import { createLogger, type Logger } from "../../src/observability/logger.js";
-import { initTracing } from "../../src/observability/tracing.js";
+import { createFakeDocumentService, type FakeDocumentService } from "@policy/domain/fakes/documentService";
+import { createFakePaymentProvider, type FakePaymentProvider } from "@policy/domain/fakes/paymentProvider";
+import { createLogger, type Logger } from "@policy/domain/logger";
+import { initTracing } from "@policy/domain/tracing";
 import { getWorkflow, listTransitions } from "../../src/workflow/repository.js";
-import type { WorkflowState } from "../../src/domain/stateMachine.js";
+import type { WorkflowState } from "@policy/domain/stateMachine";
 import { TEST_DATABASE_URL, resetDb, sampleApplication, setupDb } from "./db.js";
 
 export const spans = new InMemorySpanExporter();

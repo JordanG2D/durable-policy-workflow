@@ -1,7 +1,7 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import type { WorkflowState } from "../../src/domain/stateMachine.js";
+import type { WorkflowState } from "@policy/domain/stateMachine";
 import { getWorkflow } from "../../src/workflow/repository.js";
 import { assertCompletedOnce } from "../helpers/assertions.js";
 import { outboxRows, TEST_DATABASE_URL } from "../helpers/db.js";
@@ -30,7 +30,7 @@ afterAll(async () => {
 });
 
 function spawnWorker(env: Record<string, string> = {}): { child: ChildProcess; exited: Promise<NodeJS.Signals | number | null> } {
-  const child = spawn(process.execPath, ["--import", "tsx", "src/main.ts"], {
+  const child = spawn(process.execPath, ["--conditions=source", "--import", "tsx", "src/main.ts"], {
     cwd: repoRoot,
     env: {
       ...process.env,

@@ -3,10 +3,10 @@ import { ROOT_CONTEXT, SpanStatusCode, context, propagation, trace } from "@open
 import Fastify, { type FastifyBaseLogger, type FastifyInstance } from "fastify";
 import { withTransaction, type Pool } from "../db/pool.js";
 import { isMigrated } from "../db/migrate.js";
-import { Industries, type PolicyApplication } from "../domain/pricing.js";
-import type { Logger } from "../observability/logger.js";
+import { Industries, type PolicyApplication } from "@policy/domain/pricing";
+import type { Logger } from "@policy/domain/logger";
 import type { Metrics } from "../observability/metrics.js";
-import { traceParentOf, tracer } from "../observability/tracing.js";
+import { traceParentOf, tracer } from "@policy/domain/tracing";
 import { getWorkflow, insertWorkflow, listTransitions } from "../workflow/repository.js";
 import { confirmPayment } from "../workflow/steps.js";
 

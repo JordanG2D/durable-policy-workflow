@@ -1,10 +1,10 @@
-import type { DocumentGateway, PaymentGateway } from "../clients/gateways.js";
+import type { DocumentGateway, PaymentGateway } from "@policy/domain/clients/gateways";
 import type { Pool, Tx } from "../db/pool.js";
-import { NonRetryableError } from "../domain/errors.js";
-import type { PricingEngine } from "../domain/pricing.js";
-import { isTerminal, progressOf, type WorkflowState } from "../domain/stateMachine.js";
-import { noCrash, type CrashHook } from "../faults/crash.js";
-import type { Logger } from "../observability/logger.js";
+import { NonRetryableError } from "@policy/domain/errors";
+import type { PricingEngine } from "@policy/domain/pricing";
+import { isTerminal, progressOf, type WorkflowState } from "@policy/domain/stateMachine";
+import { noCrash, type CrashHook } from "@policy/domain/crash";
+import type { Logger } from "@policy/domain/logger";
 import type { Metrics } from "../observability/metrics.js";
 import type { ClaimedEvent } from "../outbox/outbox.js";
 import type { StepContext, StepHandler } from "../outbox/relay.js";

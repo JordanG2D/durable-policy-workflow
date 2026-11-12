@@ -1,4 +1,4 @@
-import { LeaseLostError } from "../domain/errors.js";
+import { LeaseLostError } from "./errors.js";
 import type { Pool, Tx } from "../db/pool.js";
 
 export interface OutboxEvent {

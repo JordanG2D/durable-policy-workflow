@@ -1,7 +1,7 @@
 import { createApp } from "./app.js";
 import { loadConfig } from "./config.js";
-import { crashHookFromEnv } from "./faults/crash.js";
-import { initTracing, shutdownTracing } from "./observability/tracing.js";
+import { crashHookFromEnv } from "@policy/domain/crash";
+import { initTracing, shutdownTracing } from "@policy/domain/tracing";
 
 const config = loadConfig();
 initTracing({ serviceName: `policy-workflow-${config.role}`, otlpEndpoint: config.otlpEndpoint });

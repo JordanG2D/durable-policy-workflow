@@ -1,8 +1,9 @@
 import { setTimeout as sleep } from "node:timers/promises";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { createPool, withTransaction, type Pool } from "../../src/db/pool.js";
-import { LeaseLostError, NonRetryableError, RetryableError } from "../../src/domain/errors.js";
-import { silentLogger } from "../../src/observability/logger.js";
+import { NonRetryableError, RetryableError } from "@policy/domain/errors";
+import { LeaseLostError } from "../../src/outbox/errors.js";
+import { silentLogger } from "@policy/domain/logger";
 import { createMetrics } from "../../src/observability/metrics.js";
 import { claimBatch, completeWithFence, enqueue } from "../../src/outbox/outbox.js";
 import { Relay, type StepHandler } from "../../src/outbox/relay.js";

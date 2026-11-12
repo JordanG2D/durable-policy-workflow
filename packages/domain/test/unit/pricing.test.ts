@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { flakyPricing, priceQuote, type PolicyApplication } from "../../src/domain/pricing.js";
+import { flakyPricing, priceQuote, type PolicyApplication } from "../../src/pricing.js";
 
 const base: PolicyApplication = {
   businessName: "Test Co",

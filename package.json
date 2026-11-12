@@ -6,6 +6,7 @@
   "type": "module",
   "license": "MIT",
   "workspaces": [
+    "packages/domain",
     "packages/handbuilt"
   ],
   "scripts": {
@@ -16,7 +17,7 @@
     "test:unit": "vitest run --project unit",
     "test:integration": "vitest run --project handbuilt",
     "dev": "npm run dev -w @policy/handbuilt",
-    "fakes": "npm run fakes -w @policy/handbuilt",
+    "fakes": "npm run fakes -w @policy/domain",
     "migrate": "npm run migrate -w @policy/handbuilt"
   },
   "devDependencies": {
