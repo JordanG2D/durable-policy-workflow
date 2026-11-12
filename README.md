@@ -609,11 +609,12 @@ The tag APIs do not support a function-ARN condition, so initial tagging is an
 explicit exception: the execution role can set `Project=PolicyDemo` on an untagged
 mapping in this account and region, even one belonging to another function. It
 cannot overwrite another Project value. Tag writes are restricted to Project and
-CloudFormation's reserved system-tag namespace; removing Project is not allowed.
+CloudFormation's reserved system-tag namespace. No event-source mapping untag
+permission is granted: demo tags are immutable, and cleanup deletes the mapping
+itself rather than removing its tags.
 Tagging alone does not grant mapping lifecycle access to other functions. Read-only
 mapping listing and tag lookup cover the account's us-east-1 mappings to support
-CloudFormation discovery and initial stabilization. Do not remove/change Project
-or add arbitrary mapping tags in stack updates without reviewing this policy.
+CloudFormation discovery and initial stabilization. No mapping tag-update flow is authorized; review the policy before changing tags.
 These conditions follow the [Lambda authorization reference](https://docs.aws.amazon.com/service-authorization/latest/reference/list_lambda.html)
 and [event-source mapping tagging guide](https://docs.aws.amazon.com/lambda/latest/dg/tags-esm.html);
 local policy assertions do not substitute for a live CloudFormation lifecycle test.

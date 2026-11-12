@@ -84,8 +84,5 @@ test('ESM creation and lifecycle bind the worker; no wildcard Lambda tag writes'
   assert.equal(tag.Condition.StringEqualsIfExists['aws:ResourceTag/Project'], 'PolicyDemo');
   assert.deepEqual(tag.Condition['ForAllValues:StringLike']['aws:TagKeys'], ['Project', 'aws:cloudformation:*']);
   assert.equal(tag.Condition.ArnEquals, undefined);
-  const untag = statements.find(s => actions(s).includes('lambda:UntagResource') && s.Resource['Fn::Sub'] === esm);
-  assert.equal(untag.Condition.StringEquals['aws:ResourceTag/Project'], 'PolicyDemo');
-  assert.deepEqual(untag.Condition['ForAllValues:StringNotEquals']['aws:TagKeys'], ['Project']);
-  assert.equal(untag.Condition.Null['aws:TagKeys'], 'false');
+  assert.equal(statements.some(s => actions(s).includes('lambda:UntagResource') && s.Resource['Fn::Sub'] === esm), false);
 });

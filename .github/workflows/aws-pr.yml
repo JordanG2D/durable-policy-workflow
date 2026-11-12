@@ -47,7 +47,7 @@ jobs:
         run: |
           set -euo pipefail
           npm ci
-          node --test scripts/aws/common.test.mjs
+          node --test scripts/aws/common.test.mjs scripts/aws/bootstrap.test.mjs
           npm run test:infra
           npm run aws:synth -- --quiet
           AWS_DIFF_BASE_TEMPLATE="$RUNNER_TEMP/base-template.json" npm run aws:diff

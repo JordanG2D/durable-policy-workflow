@@ -99,11 +99,7 @@ export const template = {
         StringEqualsIfExists: { 'aws:ResourceTag/Project': 'PolicyDemo' },
         'ForAllValues:StringLike': { 'aws:TagKeys': ['Project', 'aws:cloudformation:*'] },
       }),
-      allow(['lambda:UntagResource'], arn('lambda','event-source-mapping:*'), {
-        StringEquals: { 'aws:RequestedRegion': 'us-east-1', 'aws:ResourceTag/Project': 'PolicyDemo' },
-        'ForAllValues:StringNotEquals': { 'aws:TagKeys': ['Project'] },
-        Null: { 'aws:TagKeys': 'false' },
-      }),
+      // ESM tags are immutable in this disposable demo; no untag grant.
       allow(['sqs:CreateQueue','sqs:DeleteQueue','sqs:GetQueueAttributes','sqs:SetQueueAttributes','sqs:GetQueueUrl','sqs:TagQueue','sqs:UntagQueue','sqs:ListQueueTags'], queues),
       allow(['scheduler:CreateSchedule','scheduler:UpdateSchedule','scheduler:DeleteSchedule','scheduler:GetSchedule'], arn('scheduler','schedule/default/policy-demo-*')),
       allow(['logs:CreateLogGroup','logs:DeleteLogGroup','logs:PutRetentionPolicy','logs:DeleteRetentionPolicy','logs:TagResource','logs:UntagResource','logs:TagLogGroup','logs:ListTagsForResource'], [logs, sub('arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/policy-demo-*:*')]),
