@@ -15,12 +15,14 @@
     "build": "tsc -b",
     "typecheck": "tsc -b",
     "lint": "eslint .",
-    "test": "npm run test:unit && npm run test:integration",
+    "test": "npm run test:unit && npm run test:integration && npm run test:temporal",
     "test:unit": "vitest run --project unit",
     "test:integration": "vitest run --project handbuilt",
     "dev": "npm run dev -w @policy/handbuilt",
     "fakes": "npm run fakes -w @policy/domain",
-    "migrate": "npm run migrate -w @policy/handbuilt"
+    "migrate": "npm run migrate -w @policy/handbuilt",
+    "test:temporal": "vitest run --project temporal",
+    "loc": "node scripts/loc.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
