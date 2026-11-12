@@ -594,6 +594,30 @@ approval for the amount accepted by that form and confirm the increase is applie
 in us-east-1 before deploying. Keep the function caps in place rather than removing
 them to bypass the quota check.
 
+**Reviewed recovery permissions:** the bootstrap includes two separate recovery
+exceptions approved by the owner for this demo. Review their exact scope and risks
+before applying; any material change requires fresh persistent-access approval.
+
+- **IAM absent-role cleanup:** GetRole/DeleteRole are added for exactly the five
+  root-path names `policy-demo-api`, `policy-demo-migration`, `policy-demo-publisher`,
+  `policy-demo-worker`, and `policy-demo-scheduler`. The observed errors may reflect
+  IAM's authorization behavior for nonexistent roles; the full failing ARN has
+  not been proven. This exception could read/delete a real same-name root-path
+  role if one exists later. Runtime role creation, boundary requirements, policy
+  writes and PassRole stay restricted to `/policy-demo/runtime/`.
+- **HTTP API tagging:** POST is added only for the observed URL-encoded HTTP API
+  tag ARN prefix in us-east-1, requiring requested `Project=PolicyDemo` and tag
+  keys limited to Project or CloudFormation system keys. There is no untag grant.
+  This wildcard can retag another HTTP API in the region, which could enable the
+  existing Project-tag-based management/delete permissions on that API. It is
+  not fully project-isolated. Request-tag conditions fail closed; their actual
+  propagation must still be validated in an approved live run. No resource-tag
+  or API-name condition is assumed for this tagging operation.
+
+These recovery permissions add no resource classes. The API operation is described by the
+[API Gateway authorization reference](https://docs.aws.amazon.com/service-authorization/latest/reference/list_apigateway.html)
+and [HTTP API tagging reference](https://docs.aws.amazon.com/apigatewayv2/latest/api-reference/tags-resource-arn.html).
+
 The GitHub role cannot create/update the bootstrap stack or assume its execution
 role directly. It can pass that role only to CloudFormation. Runtime roles are
 restricted to `/policy-demo/runtime/` and must carry the approved permissions

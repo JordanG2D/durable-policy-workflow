@@ -101,3 +101,23 @@ test('ESM creation and lifecycle bind the worker; no wildcard Lambda tag writes'
   assert.equal(tag.Condition.ArnEquals, undefined);
   assert.equal(statements.some(s => actions(s).includes('lambda:UntagResource') && s.Resource['Fn::Sub'] === esm), false);
 });
+
+test('IAM absent-role fallback allows only exact-name root-path read/delete', () => {
+  const names = ['api','migration','publisher','worker','scheduler'];
+  const arns = names.map(name => ({ 'Fn::Sub': `arn:\${AWS::Partition}:iam::\${AWS::AccountId}:role/policy-demo-${name}` }));
+  const grants = statement('ExecutionRole').filter(s => Array.isArray(s.Resource) && s.Resource.some(r => names.some(name => r['Fn::Sub']?.endsWith(`:role/policy-demo-${name}`))));
+  assert.equal(grants.length, 1);
+  assert.deepEqual(grants[0].Action, ['iam:GetRole','iam:DeleteRole']);
+  assert.deepEqual(grants[0].Resource, arns);
+  assert.equal(JSON.stringify(grants[0].Resource).includes('*'), false);
+});
+test('API tag POST is encoded HTTP-only with fail-closed request tags, no untag', () => {
+  const grants = statement('ExecutionRole').filter(s => JSON.stringify(s.Resource).includes('/tags/'));
+  assert.equal(grants.length, 1);
+  assert.deepEqual(grants[0].Action, ['apigateway:POST']);
+  assert.equal(grants[0].Resource['Fn::Sub'], 'arn:${AWS::Partition}:apigateway:us-east-1::/tags/arn%3A${AWS::Partition}%3Aapigateway%3Aus-east-1%3A%3A%2Fv2%2Fapis%2F*');
+  assert.deepEqual(grants[0].Condition, {
+    StringEquals: { 'aws:RequestTag/Project': 'PolicyDemo' },
+    'ForAllValues:StringLike': { 'aws:TagKeys': ['Project', 'aws:cloudformation:*'] },
+  });
+});
