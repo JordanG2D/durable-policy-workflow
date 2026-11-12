@@ -1,21 +1,17 @@
-import { spawn, type ChildProcess } from "node:child_process";
-import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { WorkflowState } from "@policy/domain/stateMachine";
 import { getWorkflow } from "../../src/workflow/repository.js";
 import { assertCompletedOnce } from "../helpers/assertions.js";
-import { outboxRows, TEST_DATABASE_URL } from "../helpers/db.js";
+import { outboxRows } from "../helpers/db.js";
+import { spawnWorker as spawnWorkerProcess } from "../helpers/workerProcess.js";
 import { HAPPY_PATH, startHarness, startWorkflow, statesEntered, waitFor, waitForState, type Harness } from "../helpers/harness.js";
 
 /**
  * Crash recovery with real process death. The worker runs as a separate Node
- * process and SIGKILLs itself at a chosen point (see src/faults/crash.ts), or
+ * process and SIGKILLs itself at a chosen point (see @policy/domain/crash), or
  * is SIGKILLed by the test at random moments. A fresh worker must then finish
  * every workflow without repeating any side effect.
  */
-
-const repoRoot = fileURLToPath(new URL("../..", import.meta.url));
-const LEASE_MS = 400;
 
 let h: Harness;
 beforeAll(async () => {
@@ -29,37 +25,7 @@ afterAll(async () => {
   await h.close();
 });
 
-function spawnWorker(env: Record<string, string> = {}): { child: ChildProcess; exited: Promise<NodeJS.Signals | number | null> } {
-  const child = spawn(process.execPath, ["--conditions=source", "--import", "tsx", "src/main.ts"], {
-    cwd: repoRoot,
-    env: {
-      ...process.env,
-      DATABASE_URL: TEST_DATABASE_URL,
-      ROLE: "worker",
-      PORT: "0",
-      LOG_LEVEL: "warn",
-      PAYMENT_PROVIDER_URL: h.paymentUrl,
-      DOCUMENT_SERVICE_URL: h.documentsUrl,
-      PAYMENT_CALLBACK_URL: `${h.apiUrl}/webhooks/payments`,
-      RELAY_POLL_INTERVAL_MS: "20",
-      RELAY_LEASE_MS: String(LEASE_MS),
-      RETRY_MAX_ATTEMPTS: "6",
-      RETRY_BASE_DELAY_MS: "20",
-      RETRY_MAX_DELAY_MS: "100",
-      ...env,
-    },
-    stdio: ["ignore", "ignore", "pipe"],
-  });
-  let stderr = "";
-  child.stderr?.on("data", (d: Buffer) => (stderr += d.toString()));
-  const exited = new Promise<NodeJS.Signals | number | null>((resolve) => {
-    child.on("exit", (code, signal) => {
-      if (signal !== "SIGKILL" && code !== 0) console.error(stderr);
-      resolve(signal ?? code);
-    });
-  });
-  return { child, exited };
-}
+const spawnWorker = (env: Record<string, string> = {}) => spawnWorkerProcess(h, env);
 
 const recover = () =>
   h.startWorker({ relay: { pollIntervalMs: 20, batchSize: 10, leaseMs: 2_000 }, retry: { maxAttempts: 6, baseDelayMs: 20, maxDelayMs: 100 } });

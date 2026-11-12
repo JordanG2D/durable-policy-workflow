@@ -1,0 +1,19 @@
+{
+  "name": "@policy/parity",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "description": "The scenario suite both implementations must pass, and the driver interface each implements.",
+  "exports": {
+    "./*": {
+      "types": "./src/*.ts",
+      "source": "./src/*.ts",
+      "default": "./dist/src/*.js"
+    }
+  },
+  "dependencies": {
+    "@opentelemetry/sdk-trace-base": "^2.12.1",
+    "@policy/domain": "0.1.0"
+  }
+}

@@ -22,7 +22,7 @@ export default defineConfig({
         resolve,
         test: {
           name: "handbuilt",
-          include: ["packages/handbuilt/test/integration/**/*.test.ts"],
+          include: ["packages/handbuilt/test/integration/**/*.test.ts", "packages/handbuilt/test/parity/**/*.test.ts"],
           // Integration files share one Postgres database, so run them one at a time.
           fileParallelism: false,
           testTimeout: 30_000,

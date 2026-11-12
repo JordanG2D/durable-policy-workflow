@@ -5,6 +5,9 @@
       "path": "packages/domain"
     },
     {
+      "path": "packages/parity"
+    },
+    {
       "path": "packages/handbuilt"
     }
   ]
