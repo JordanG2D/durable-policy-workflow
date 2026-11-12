@@ -93,3 +93,33 @@ it("runs a complete policy through publisher and SQS worker with duplicate deliv
   expect(rows[0]!.document_delivery_id).toMatch(/^demo-document-/);
   expect((await pool.query<{ n: number }>("SELECT count(*)::int AS n FROM outbox WHERE workflow_id=$1 AND status!='done'", [workflowId])).rows[0]!.n).toBe(0);
 });
+
+it("HTTP replay preserves values and status although JSONB reorders object keys", async () => {
+  const { buildServer } = await import("../../src/http/server.js");
+  const { createHttpHandler } = await import("../../src/aws/http.js");
+  const { createMetrics } = await import("../../src/observability/metrics.js");
+  const { createLogger } = await import("@policy/domain/logger");
+  const { sampleApplication } = await import("../helpers/db.js");
+  const server = buildServer({ pool, log: createLogger("silent"), metrics: createMetrics({ defaultMetrics: false }) });
+  try {
+    const handle = createHttpHandler(server);
+    const request = {
+      headers: { "content-type": "application/json", "idempotency-key": randomUUID() },
+      rawPath: "/v1/policy-applications", rawQueryString: "", isBase64Encoded: false,
+      body: JSON.stringify(sampleApplication),
+      requestContext: { http: { method: "POST", sourceIp: "127.0.0.1" } },
+    } as unknown as import("aws-lambda").APIGatewayProxyEventV2;
+    const created = await handle(request);
+    const replay = await handle(request);
+    const decode = (body: string): unknown => JSON.parse(Buffer.from(body, "base64").toString());
+    const originalBody = decode(created.body!);
+    const replayBody = decode(replay.body!);
+    expect(created.statusCode).toBe(202);
+    expect(replay.statusCode).toBe(created.statusCode);
+    expect(replay.headers?.["idempotent-replayed"]).toBe("true");
+    expect(replayBody).toEqual(originalBody);
+    // This is the old smoke assertion. It rejects this correct real DB replay.
+    expect(JSON.stringify(replayBody)).not.toBe(JSON.stringify(originalBody));
+    expect((await pool.query<{ n: number }>("SELECT count(*)::int AS n FROM workflows")).rows[0]!.n).toBe(1);
+  } finally { await server.close(); }
+});

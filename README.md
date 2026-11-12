@@ -599,8 +599,11 @@ them to bypass the quota check.
 (with no trailing `/*`), requiring requested `Project=PolicyDemo` and tag keys
 limited to Project or CloudFormation system keys. This wildcard covers stage
 collections under other HTTP APIs in us-east-1. Request-tag propagation for this
-literal action is not fully documented: the conditions fail closed and have not
-been validated in a successful live run. This is not a grant for route/integration
+literal action is not fully documented. The conditions were validated during live
+stage creation in run `43323262418` on commit
+`1ca27ac45d2f474aa8c6765e4b3c1b2ecf0e966a`: deployment succeeded and both migration
+invocations passed at 22:59 UTC on 12 November 2026. This validates stage creation,
+not the complete smoke test or teardown. This is not a grant for route/integration
 tags or untagging. The owner approved this exact persistent permission; review its
 scope before applying and obtain fresh approval for material changes. No resources
 are added.
@@ -774,6 +777,14 @@ for the DLQ alarm to become ALARM; it also checks that the other two alarms exis
 All waits have deadlines. The default one-minute scheduler means completion is
 measured in minutes, not the local relay's milliseconds.
 
+An offline regression through the Fastify Lambda adapter and PostgreSQL 16
+confirmed that JSONB can reorder the stored response's object keys without
+changing its values. Replay verification uses deep strict equality, preserves the
+replay-header check, and checks the original HTTP status. Tests reject changed,
+missing or extra fields, changed value types and reordered arrays; durable-effect
+and transition checks remain in place. This local evidence does not establish a
+successful cloud smoke test.
+
 SQS is a transport adapter, not a second workflow database. The scheduler sends
 due outbox event IDs without marking them complete. The worker claims the exact
 DB event and reuses the unchanged step handlers and fenced transaction logic.
@@ -795,6 +806,12 @@ of interpreting `DELETE_COMPLETE` alone as proof. The stack never configures
 cross-region backup replication; if that changes, its backups must also be
 included in cleanup. Residuals or inaccessible inventory fail the command and
 need inspection. Never delete unrelated account resources to make a check pass.
+
+If deletion fails on `WorkerMessages`, cleanup permits one guarded retry only
+after the complete regional Lambda mapping inventory proves that exact record's
+UUID is absent. It skips only the stale CloudFormation record, never a live
+mapping or another resource. IAM permissions are not broadened, and full residual
+verification must still pass before cleanup is reported complete.
 
 Alarm verification reads exactly the three metric-alarm names in
 `scripts/aws/alarm-names.json`, rather than enumerating an arbitrary name prefix.
