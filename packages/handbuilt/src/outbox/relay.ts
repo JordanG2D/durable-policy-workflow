@@ -98,11 +98,12 @@ export class Relay {
     const claims = await claimBatch(this.opts.pool, this.owner, this.opts.batchSize, this.opts.leaseMs);
     // Each workflow has at most one pending step event at a time, so events in a
     // batch belong to different workflows and can run concurrently.
-    await Promise.all(claims.map((c) => this.process(c)));
+    await Promise.all(claims.map((c) => this.processClaim(c)));
     return claims.length;
   }
 
-  private async process(claim: ClaimedEvent): Promise<void> {
+  /** Execute a DB-fenced claim obtained by a transport adapter. */
+  async processClaim(claim: ClaimedEvent): Promise<void> {
     const { metrics, pool } = this.opts;
     const log = this.opts.logger.child({
       workflowId: claim.workflowId,

@@ -453,9 +453,9 @@ workflow and on each outbox row. Every step, in whichever worker and however muc
 starts its span from that context, so retries and crash recovery appear in the same trace.
 
 **Deliberately left out**, to keep the scope tight:
-- *A message broker.* The relay dispatches to in-process step handlers. The `Relay`
-  handler map is the seam where an SQS/Kafka publisher would go. The optional SQS-via-
-  LocalStack adapter was not built.
+- *A local message broker.* Local development still dispatches in-process. The AWS
+  adapter described above uses SQS while preserving the handler and lease-fencing
+  contract. A LocalStack deployment was not built.
 - *Redrive / operator tooling* for dead-lettered workflows, and *automatic refunds* for
   captures that arrive after dead-lettering. These are flagged, not handled.
 - *Webhook signature verification* (HMAC) on `/webhooks/payments`, plus authentication and
@@ -472,6 +472,256 @@ working under human direction. The human set the requirements, the design constr
 evidence. All code was verified by the test suite in this repository, including the
 fault-injection tests that kill real processes. Nothing here was accepted because it
 looked right. It was accepted because a test that tried to break it passed.
+
+## Running on AWS
+
+This is a **disposable portfolio demo**, not a production insurance or payment
+system. Only `packages/handbuilt` is deployed. Temporal stays local. Payment and
+document providers are synthetic, with idempotent effects recorded in Postgres;
+no real payment is charged or email sent. Use synthetic applicant data only.
+
+**Verification status:** the AWS adapter, migration checks, CDK synthesis, and
+local regression tests are implemented. A live deploy, cloud smoke test, visible
+alarms, and clean cloud teardown must all pass before claiming AWS qualification.
+Do not confuse offline synthesis with a successful deployment.
+
+```mermaid
+flowchart LR
+  Client[Signed IAM demo client] --> HTTP[HTTP API]
+  HTTP --> API[Node 22 API Lambda]
+  API --> DB[(Single-AZ private Postgres)]
+  Schedule[EventBridge Scheduler every minute] --> Relay[Outbox publisher Lambda]
+  Relay --> DB
+  Relay --> Queue[SQS workflow events]
+  Queue --> Worker[Worker Lambda]
+  Worker --> DB
+  Queue -->|poison redrive| DLQ[SQS DLQ]
+  Worker -->|durable terminal-failure notice| DLQ
+  Migration[Deploy-time migration Lambda] --> DB
+  Secret[Secrets Manager] --> API
+  Secret --> Relay
+  Secret --> Worker
+  Secret --> Migration
+  Logs[JSON CloudWatch logs + EMF lag metric + X-Ray]
+  API -.-> Logs
+  Relay -.-> Logs
+  Worker -.-> Logs
+```
+
+The VPC has two isolated subnets because an RDS subnet group requires two AZs.
+The database, Lambdas and the two interface endpoints use **one** AZ. There is no
+NAT gateway, Internet gateway, public database, or public IPv4 address. Outbound
+traffic is limited to Postgres and the SQS/Secrets Manager endpoints. Lambda's
+managed log and X-Ray delivery does not need extra VPC endpoints. The publisher
+emits the outbox lag metric as CloudWatch Embedded Metric Format (EMF), rather
+than calling the monitoring API through a third endpoint.
+
+### Costs and limits
+
+The demo spending allowance is **$5**. Stop before spending more; the budget alert
+is only a delayed warning, not enforcement.
+
+The earlier **~$15–30/month** estimate can apply with allowances or credits; it is
+**not a reliable ceiling**. At current us-east-1 list prices, 730 running hours
+are roughly **$30.28/month before request/compute/log charges, tax and credits**:
+
+| Item | Approximate monthly baseline |
+| --- | ---: |
+| RDS PostgreSQL db.t4g.micro, single AZ | $11.68 |
+| 20 GiB gp3 database storage | $2.30 |
+| SQS and Secrets Manager interface endpoints, one AZ each | $14.60 |
+| One Secrets Manager secret | $0.40 |
+| DLQ, outbox and error-rate alarms (10 evaluated metrics total) | $1.00 |
+| One custom outbox-lag metric | $0.30 |
+
+The error-rate alarm combines Errors and Invocations for four functions, so it
+has eight evaluated metrics. A 31-day month adds about $0.50 to endpoint/instance
+charges. Free-plan credits, remaining balance and expiry are account-specific;
+never assume free RDS. API requests, Lambda/SQS use, secret reads, logs, traces,
+asset storage, data transfer and surplus RDS CPU credits can add charges.
+Sources: [RDS](https://aws.amazon.com/rds/postgresql/pricing/),
+[PrivateLink](https://aws.amazon.com/privatelink/pricing/),
+[Secrets Manager](https://aws.amazon.com/secrets-manager/pricing/),
+[CloudWatch](https://aws.amazon.com/cloudwatch/pricing/).
+
+**Deploy for a demonstration, run the smoke test, destroy immediately.** Endpoint
+billing rounds partial endpoint-hours up; RDS has a minimum charge when an
+instance is started. A short session is much cheaper than leaving it running,
+but there is no automatic hard dollar cap.
+
+Required cost controls:
+
+- An account-wide **$5 USD monthly AWS Budget** with an actual-spend email alert
+  must exist before bootstrap or deployment. `portfolio-demo-budget` is the
+  default name. `infra/lib/budget-stack.ts` defines the budget as code; reuse an
+  existing verified budget instead of creating a duplicate. `POLICY_CREATE_BUDGET`
+  is off by default. An alert recipient must be explicitly supplied.
+- Budget data normally refreshes every **8–12 hours** and notifications may lag.
+  The alert does not stop resources, and teardown charges can appear later.
+- No NAT; one AZ per interface endpoint; single-AZ micro RDS; low Lambda reserved
+  concurrency; IAM-authenticated API with 2 requests/second and burst 5 throttles.
+- Seven-day log retention, no database backups/final snapshots, deletion policies
+  on runtime resources, and a separate residual-resource verification.
+- GitHub's manual demo workflow always attempts cleanup, including after a failed
+  smoke test. Cancellation, runner loss or hard timeout can defeat `always()`;
+  dispatch `destroy` or run the command below and verify its result.
+
+### Review and first bootstrap
+
+Requirements: Node.js 22, npm, `zip`, and temporary AWS credentials for the first
+bootstrap only. Keep credentials in the operator's environment or approved
+credential provider, never an env file in this repository. Do not paste keys
+into chat, shell history, workflow YAML, commits, or Actions secrets.
+
+Before applying anything, review and approve the supporting resource inventory:
+`PolicyDemo` creates the VPC/subnets/routes/security groups, RDS subnet group,
+scoped Lambda/Scheduler roles and policies, API integration/routes/stage,
+Lambda event mapping and invocation permission, alongside the requested services.
+The ZIP-only `PolicyDemoBootstrap` creates a private S3 asset bucket and policy,
+a GitHub OIDC provider only if absent, a repository/main-bound deployment role,
+a CloudFormation service role and a runtime permissions boundary. It creates
+**no ECR repository, SSM parameter, customer-managed KMS key, helper Lambda, SNS
+topic or extra VPC endpoint**. AWS may create the RDS service-linked role and
+service-managed ENIs. Stop if anything outside this inventory is needed.
+
+**Lambda quota preflight:** this stack reserves six concurrent executions
+(API 2, worker 2, publisher 1, migration 1). Lambda requires 100 executions to
+remain unreserved, so the account's applied regional concurrency quota must be
+at least **106** before deployment. Fresh accounts can start with a quota of 10,
+which blocks this configuration. The AWS quota-request console currently requires
+a minimum request of 1,000, although this stack itself needs only 106. Obtain owner
+approval for the amount accepted by that form and confirm the increase is applied
+in us-east-1 before deploying. Keep the function caps in place rather than removing
+them to bypass the quota check.
+
+The GitHub role cannot create/update the bootstrap stack or assume its execution
+role directly. It can pass that role only to CloudFormation. Runtime roles are
+restricted to `/policy-demo/runtime/` and must carry the approved permissions
+boundary. Network creation requires the project tag; network modifications are
+restricted to that tag. Some AWS create/list APIs have no pre-existing resource
+identifier, and their permissions use service/region constraints rather than
+claiming every permission can have a resource-specific ARN. Review the complete
+policy in `infra/bootstrap/template.mjs` before granting access.
+
+Event-source mapping create/get/update/delete permissions bind the exact
+`policy-demo-worker` function; update/delete additionally require its Project tag.
+The tag APIs do not support a function-ARN condition, so initial tagging is an
+explicit exception: the execution role can set `Project=PolicyDemo` on an untagged
+mapping in this account and region, even one belonging to another function. It
+cannot overwrite another Project value. Tag writes are restricted to Project and
+CloudFormation's reserved system-tag namespace. No event-source mapping untag
+permission is granted: demo tags are immutable, and cleanup deletes the mapping
+itself rather than removing its tags.
+Tagging alone does not grant mapping lifecycle access to other functions. Read-only
+mapping listing and tag lookup cover the account's us-east-1 mappings to support
+CloudFormation discovery and initial stabilization. No mapping tag-update flow is authorized; review the policy before changing tags.
+These conditions follow the [Lambda authorization reference](https://docs.aws.amazon.com/service-authorization/latest/reference/list_lambda.html)
+and [event-source mapping tagging guide](https://docs.aws.amazon.com/lambda/latest/dg/tags-esm.html);
+local policy assertions do not substitute for a live CloudFormation lifecycle test.
+
+HTTP API route/integration/stage paths cannot be restricted to an ID before it exists;
+this documented child-resource exception is limited to the CloudFormation
+service role and us-east-1.
+
+```sh
+npm ci
+npm run aws:bootstrap              # creates a local review template; no AWS calls
+# Only after reviewing and explicitly approving persistent access:
+AWS_REGION=us-east-1 AWS_BUDGET_NAME=portfolio-demo-budget \
+  AWS_BOOTSTRAP_APPROVED=true npm run aws:bootstrap -- --apply
+```
+
+Bootstrap refuses an existing stack rather than silently expanding its IAM
+permissions. It checks the budget before writes and reuses an existing matching
+GitHub OIDC provider without changing it. Account-specific outputs are saved
+only to ignored `infra/.state/bootstrap-outputs.json`, with owner-only access.
+Set the repository Actions variable **POLICY_DEMO_ROLE_ARN** to its
+`GithubRoleArn`. This value is not a secret, but it is kept out of the public
+repository. No long-lived AWS key belongs in GitHub.
+
+Once the role exists, notify the owner. **Verify a manual OIDC workflow before
+removing the temporary `portfolio-bootstrap` IAM user**, so there is a working
+replacement. The owner deletes that user and its keys only at the explicitly
+approved time. The app runtime never needs administrator access.
+
+### Deploy, migrate and smoke test
+
+After the code is reviewed and the workflow is on `main`, open GitHub Actions →
+**Disposable AWS demo** → **Run workflow**, select `demo`, and approve the
+reviewed resource inventory. Deployment is manual only; PRs never deploy and
+never receive AWS credentials. The workflow uses short-lived GitHub OIDC
+credentials, refreshes them before cleanup, and serializes demo runs.
+
+PR checks run `cdk synth` and `cdk diff` against a separately synthesized trusted
+base template. This is deliberately **offline**, not a live-account drift check,
+so forked PR code cannot obtain AWS privileges. Runtime resources are created
+from the synthesized template with an explicitly scoped CloudFormation role.
+
+For the approved first deployment or private troubleshooting with the same
+short-lived credentials, the equivalent commands are:
+
+```sh
+export AWS_REGION=us-east-1 AWS_BUDGET_NAME=portfolio-demo-budget
+export AWS_DEMO_APPROVED=true      # only after inventory/cost approval
+npm run aws:deploy
+npm run aws:smoke
+npm run aws:destroy
+```
+
+Deploy invokes the migration Lambda twice. Migrations take a transaction-scoped
+advisory lock, hash the exact identity/SQL bytes, reject changed or unknown
+history, and skip already applied migrations. Only the exact original legacy
+migration can be upgraded from an unhashed row. The second deploy-time invocation
+must report no new migrations.
+
+The smoke test signs requests with AWS SigV4, creates a synthetic policy,
+checks completion and idempotent replay, and sends a uniquely identified poison
+message to the work queue. It waits for **native SQS redrive** into the DLQ and
+for the DLQ alarm to become ALARM; it also checks that the other two alarms exist.
+All waits have deadlines. The default one-minute scheduler means completion is
+measured in minutes, not the local relay's milliseconds.
+
+SQS is a transport adapter, not a second workflow database. The scheduler sends
+due outbox event IDs without marking them complete. The worker claims the exact
+DB event and reuses the unchanged step handlers and fenced transaction logic.
+Duplicates, expired leases and publish-after-crash repeats are safe; Postgres
+still owns retry/backoff and workflow state. Terminal failures have a durable
+outbox notice mirrored to the DLQ. Malformed poison messages use SQS native
+redrive and partial batch failure responses.
+
+### Destroy and verify
+
+```sh
+npm run aws:destroy               # delete runtime, empty demo assets, verify residuals
+npm run aws:verify-clean          # read-only verification afterward
+```
+
+Destruction skips final RDS snapshots and deletes automated backups. Verification
+checks for demo-owned resources and retained snapshots/automated backups instead
+of interpreting `DELETE_COMPLETE` alone as proof. The stack never configures
+cross-region backup replication; if that changes, its backups must also be
+included in cleanup. Residuals or inaccessible inventory fail the command and
+need inspection. Never delete unrelated account resources to make a check pass.
+
+The empty bootstrap bucket, IAM/OIDC setup and budget deliberately remain for
+future manual demos; none has a recurring base charge once the bucket is empty.
+Asset uploads are under `policy-demo/`, with a one-day lifecycle fallback.
+To remove the free bootstrap as well, the owner can delete `PolicyDemoBootstrap`
+after confirming its bucket is empty and no future OIDC run needs the role.
+An existing account-wide OIDC provider reused by bootstrap is not owned/deleted
+by this project. Do not delete a shared provider or an unrelated budget.
+
+### What production would change
+
+This demo intentionally sacrifices durability and availability for reversibility.
+Production needs multi-AZ database capacity, backups/PITR and restore drills,
+credential rotation and least-privilege database users, production provider
+integrations and signed callbacks, WAF through a supported front door,
+strong customer authorization, alarms routed to responders, audited redrive and
+retention policies, and a reviewed update/rollback strategy. Provisioned
+concurrency, RDS Proxy and additional endpoints may be appropriate after real
+load measurement; none is included in this demo's budget. Add them only with
+explicit resource and spending approval.
 
 ## License
 

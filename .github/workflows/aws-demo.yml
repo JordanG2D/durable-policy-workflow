@@ -1,0 +1,89 @@
+name: Disposable AWS demo
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: Deploy, smoke test, and always destroy; or destroy only
+        required: true
+        type: choice
+        default: demo
+        options: [demo, destroy]
+      approved_resource_inventory:
+        description: I approved the documented supporting resources and disposable-demo costs; $5 budget alerts are not a spending cap
+        required: true
+        type: boolean
+        default: false
+permissions:
+  contents: read
+concurrency:
+  group: policy-demo-aws
+  cancel-in-progress: false
+jobs:
+  disposable-demo:
+    if: github.ref == 'refs/heads/main' && (inputs.approved_resource_inventory || inputs.action == 'destroy')
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AWS_REGION: us-east-1
+      AWS_BUDGET_NAME: portfolio-demo-budget
+      AWS_DEMO_APPROVED: ${{ inputs.approved_resource_inventory && 'true' || 'false' }}
+      AWS_EC2_METADATA_DISABLED: 'true'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci
+      - name: Mask configured deployment identity
+        env:
+          DEMO_ROLE: ${{ vars.POLICY_DEMO_ROLE_ARN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$DEMO_ROLE"
+          printf '::add-mask::%s\n' "$DEMO_ROLE"
+      - name: Obtain short-lived deployment credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.POLICY_DEMO_ROLE_ARN }}
+          aws-region: us-east-1
+          role-session-name: policy-demo-${{ github.run_id }}
+          role-duration-seconds: 3600
+          mask-aws-account-id: true
+      - name: Deploy and run digest-checked migrations twice
+        if: inputs.action == 'demo'
+        timeout-minutes: 45
+        run: npm run aws:deploy
+      - name: Refresh credentials for bounded smoke test
+        if: inputs.action == 'demo'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.POLICY_DEMO_ROLE_ARN }}
+          aws-region: us-east-1
+          role-session-name: policy-demo-smoke-${{ github.run_id }}
+          role-duration-seconds: 3600
+          mask-aws-account-id: true
+      - name: Verify policy delivery, replay, native redrive and alarms
+        if: inputs.action == 'demo'
+        timeout-minutes: 42
+        run: npm run aws:smoke
+      - name: Refresh cleanup credentials even after failure
+        if: always()
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.POLICY_DEMO_ROLE_ARN }}
+          aws-region: us-east-1
+          role-session-name: policy-demo-cleanup-${{ github.run_id }}
+          role-duration-seconds: 3600
+          mask-aws-account-id: true
+      - name: Always destroy runtime and verify no charged leftovers
+        if: always()
+        timeout-minutes: 55
+        run: npm run aws:destroy
+      # A terminated runner cannot guarantee cleanup. If cancelled or timed out,
+      # manually dispatch destroy and inspect its residual verification result.

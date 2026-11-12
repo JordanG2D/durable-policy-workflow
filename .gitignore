@@ -3,3 +3,11 @@ dist/
 coverage/
 .env
 *.log
+
+# Local AWS build tools and generated deployment state
+.tools/
+infra/cdk.out/
+infra/.state/
+infra/dist/
+
+infra/.build/

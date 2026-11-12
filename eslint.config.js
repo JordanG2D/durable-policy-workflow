@@ -2,7 +2,7 @@ import js from "@eslint/js";
 import tseslint from "typescript-eslint";
 
 export default tseslint.config(
-  { ignores: ["**/dist/**", "**/node_modules/**", "coverage/**"] },
+  { ignores: ["**/dist/**", "**/node_modules/**", "coverage/**", "**/cdk.out/**", "infra/.state/**", ".tools/**", "infra/.build/**"] },
   js.configs.recommended,
   ...tseslint.configs.recommendedTypeChecked,
   {
@@ -56,11 +56,11 @@ export default tseslint.config(
     },
   },
   {
-    files: ["eslint.config.js", "scripts/**/*.mjs"],
+    files: ["eslint.config.js", "scripts/**/*.mjs", "infra/bootstrap/*.mjs"],
     ...tseslint.configs.disableTypeChecked,
   },
   {
-    files: ["scripts/**/*.mjs"],
+    files: ["scripts/**/*.mjs", "infra/bootstrap/*.mjs"],
     languageOptions: {
       globals: { console: "readonly", fetch: "readonly", process: "readonly", setTimeout: "readonly" },
     },
