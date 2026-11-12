@@ -45,6 +45,7 @@ export const MIGRATIONS: readonly { readonly id: number; readonly name: string; 
         workflow_id      uuid NOT NULL REFERENCES workflows (id),
         type             text NOT NULL,
         payload          jsonb NOT NULL DEFAULT '{}'::jsonb,
+        correlation_id   text,
         trace_parent     text,
         status           text NOT NULL DEFAULT 'pending'
                            CHECK (status IN ('pending','done','dead')),

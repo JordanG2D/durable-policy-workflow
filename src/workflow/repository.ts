@@ -119,6 +119,7 @@ export async function insertWorkflow(
   await enqueue(tx, {
     workflowId: input.id,
     type: "quote.requested",
+    correlationId: input.correlationId,
     traceParent: input.traceParent,
   });
   return toWorkflow(rows[0]!);
@@ -201,6 +202,7 @@ export async function transition(
       workflowId: workflow.id,
       type: args.event.type,
       ...(args.event.payload ? { payload: args.event.payload } : {}),
+      correlationId: workflow.correlationId,
       traceParent: traceParentOf() ?? workflow.traceParent,
     });
   }

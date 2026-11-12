@@ -105,6 +105,7 @@ export class Relay {
     const { metrics, pool } = this.opts;
     const log = this.opts.logger.child({
       workflowId: claim.workflowId,
+      correlationId: claim.correlationId,
       eventId: claim.eventId,
       event: claim.type,
       attempt: claim.attempts,

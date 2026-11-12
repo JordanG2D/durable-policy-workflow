@@ -5,6 +5,7 @@ export interface OutboxEvent {
   readonly workflowId: string;
   readonly type: string;
   readonly payload?: Record<string, unknown>;
+  readonly correlationId?: string | undefined;
   readonly traceParent?: string | null | undefined;
 }
 
@@ -14,6 +15,7 @@ export interface ClaimedEvent {
   readonly workflowId: string;
   readonly type: string;
   readonly payload: Record<string, unknown>;
+  readonly correlationId: string | null;
   readonly traceParent: string | null;
   /** Attempts including the one this claim starts. */
   readonly attempts: number;
@@ -28,9 +30,15 @@ export interface ClaimedEvent {
  */
 export async function enqueue(tx: Tx, event: OutboxEvent): Promise<string> {
   const { rows } = await tx.query<{ event_id: string }>(
-    `INSERT INTO outbox (workflow_id, type, payload, trace_parent)
-     VALUES ($1, $2, $3, $4) RETURNING event_id`,
-    [event.workflowId, event.type, JSON.stringify(event.payload ?? {}), event.traceParent ?? null],
+    `INSERT INTO outbox (workflow_id, type, payload, correlation_id, trace_parent)
+     VALUES ($1, $2, $3, $4, $5) RETURNING event_id`,
+    [
+      event.workflowId,
+      event.type,
+      JSON.stringify(event.payload ?? {}),
+      event.correlationId ?? null,
+      event.traceParent ?? null,
+    ],
   );
   return rows[0]!.event_id;
 }
@@ -58,6 +66,7 @@ export async function claimBatch(
     workflow_id: string;
     type: string;
     payload: Record<string, unknown>;
+    correlation_id: string | null;
     trace_parent: string | null;
     attempts: number;
     lease_token: string;
@@ -79,7 +88,7 @@ export async function claimBatch(
             attempts = o.attempts + 1
        FROM due
       WHERE o.id = due.id
-     RETURNING o.id, o.event_id, o.workflow_id, o.type, o.payload, o.trace_parent,
+     RETURNING o.id, o.event_id, o.workflow_id, o.type, o.payload, o.correlation_id, o.trace_parent,
                o.attempts, o.lease_token, o.lease_owner`,
     [limit, owner, leaseMs],
   );
@@ -90,6 +99,7 @@ export async function claimBatch(
       workflowId: r.workflow_id,
       type: r.type,
       payload: r.payload,
+      correlationId: r.correlation_id,
       traceParent: r.trace_parent,
       attempts: r.attempts,
       leaseToken: r.lease_token,

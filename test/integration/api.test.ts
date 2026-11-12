@@ -66,6 +66,8 @@ describe("happy path", () => {
     const transitioned = workerLogs.lines.filter((l) => l.msg === "workflow transitioned" && l.workflowId === id);
     expect(transitioned.length).toBe(5);
     for (const line of transitioned) expect(line.correlationId).toBe("corr-happy-path-1");
+    const aboutWorkflow = workerLogs.lines.filter((l) => l.workflowId === id);
+    expect(aboutWorkflow.every((l) => l.correlationId === "corr-happy-path-1")).toBe(true);
 
     expect(await metricValue(h.api, "workflows_started_total")).toBe(1);
     expect(await metricValue(worker, "workflows_completed_total")).toBe(1);

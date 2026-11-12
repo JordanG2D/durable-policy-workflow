@@ -1,7 +1,8 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { assertCompletedOnce, assertNoDuplicateEffects } from "../helpers/assertions.js";
 import { outboxRows } from "../helpers/db.js";
-import { metricValue, startHarness, startWorkflow, waitForState, type Harness } from "../helpers/harness.js";
+import { logSink, metricValue, startHarness, startWorkflow, waitForState, type Harness } from "../helpers/harness.js";
+import { getWorkflow } from "../../src/workflow/repository.js";
 
 let h: Harness;
 beforeAll(async () => {
@@ -17,7 +18,8 @@ afterAll(async () => {
 describe("fault: document service down", () => {
   it("retries, then dead-letters with the reason; the policy stays issued and paid once", async () => {
     h.documents.setFaults({ down: true });
-    const worker = await h.startWorker();
+    const logs = logSink();
+    const worker = await h.startWorker({}, { logger: logs.logger });
     const id = await startWorkflow(h.apiUrl);
 
     const wf = await waitForState(h.pool, id, "DEAD_LETTERED");
@@ -32,6 +34,14 @@ describe("fault: document service down", () => {
       attempts: 4,
     });
     await assertNoDuplicateEffects(h, id);
+
+    // Retry and dead-letter log lines are structured and carry the correlation id.
+    const correlationId = (await getWorkflow(h.pool, id))!.correlationId;
+    const retries = logs.lines.filter((l) => l.msg === "step failed; retry scheduled" && l.workflowId === id);
+    expect(retries).toHaveLength(3);
+    expect(retries.every((l) => l.correlationId === correlationId && l.event === "policy.issued")).toBe(true);
+    const dead = logs.lines.find((l) => l.msg === "step dead-lettered");
+    expect(dead).toMatchObject({ correlationId, workflowId: id, level: "error" });
   });
 
   it("recovers if the service comes back within the retry budget, delivering once", async () => {
