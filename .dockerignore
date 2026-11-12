@@ -1,8 +1,8 @@
-node_modules
-dist
-coverage
+**/node_modules
+**/dist
+**/coverage
+**/test
 .git
 .github
-test
 *.log
 .env

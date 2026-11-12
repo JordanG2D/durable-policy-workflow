@@ -43,7 +43,7 @@ services:
   fakes:
     build: .
     image: durable-policy-workflow:local
-    command: ["node", "dist/src/fakes/main.js"]
+    command: ["node", "packages/handbuilt/dist/src/fakes/main.js"]
     environment:
       # Example: FAKE_PAYMENT_FAULTS='{"responseDelayMs":3000}' docker compose up
       FAKE_PAYMENT_FAULTS: ${FAKE_PAYMENT_FAULTS:-}
