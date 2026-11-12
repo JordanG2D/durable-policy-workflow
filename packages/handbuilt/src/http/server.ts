@@ -1,9 +1,11 @@
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { ROOT_CONTEXT, SpanStatusCode, context, propagation, trace } from "@opentelemetry/api";
 import Fastify, { type FastifyBaseLogger, type FastifyInstance } from "fastify";
 import { withTransaction, type Pool } from "../db/pool.js";
 import { isMigrated } from "../db/migrate.js";
-import { Industries, type PolicyApplication } from "@policy/domain/pricing";
+import type { PolicyApplication } from "@policy/domain/pricing";
+import { applicationSchema, paymentCallbackSchema, requestHash } from "@policy/domain/schemas";
+import { WORKFLOW_SPAN_NAME } from "@policy/domain/steps";
 import type { Logger } from "@policy/domain/logger";
 import type { Metrics } from "../observability/metrics.js";
 import { traceParentOf, tracer } from "@policy/domain/tracing";
@@ -19,36 +21,6 @@ export interface ServerDeps {
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-const applicationSchema = {
-  type: "object",
-  additionalProperties: false,
-  required: ["businessName", "industry", "annualRevenueCents", "employeeCount", "contactEmail"],
-  properties: {
-    businessName: { type: "string", minLength: 1, maxLength: 200 },
-    industry: { type: "string", enum: [...Industries] },
-    annualRevenueCents: { type: "integer", minimum: 0, maximum: 100_000_000_000 },
-    employeeCount: { type: "integer", minimum: 0, maximum: 10_000 },
-    contactEmail: { type: "string", minLength: 3, maxLength: 320, pattern: "^[^@\\s]+@[^@\\s]+$" },
-  },
-} as const;
-
-const paymentCallbackSchema = {
-  type: "object",
-  required: ["eventId", "type", "chargeId", "reference"],
-  properties: {
-    eventId: { type: "string", minLength: 1, maxLength: 200 },
-    type: { type: "string" },
-    chargeId: { type: "string", minLength: 1, maxLength: 200 },
-    reference: { type: "string" },
-  },
-} as const;
-
-/** Stable hash of the request body, so "same key, different request" can be detected. */
-function requestHash(body: PolicyApplication): string {
-  const canonical = JSON.stringify(Object.fromEntries(Object.entries(body).sort(([a], [b]) => a.localeCompare(b))));
-  return createHash("sha256").update(canonical).digest("hex");
-}
 
 export function buildServer(deps: ServerDeps): FastifyInstance {
   const { pool, metrics } = deps;
@@ -123,7 +95,7 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
         // Root span of the workflow's trace. It ends with this request; later
         // steps attach to it through the stored traceparent.
         const span = tracer().startSpan(
-          "workflow policy-issuance",
+          WORKFLOW_SPAN_NAME,
           { attributes: { "workflow.id": workflowId, "correlation.id": req.id } },
           parent,
         );

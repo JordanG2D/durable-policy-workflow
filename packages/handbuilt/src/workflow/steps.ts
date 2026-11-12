@@ -1,6 +1,7 @@
 import type { DocumentGateway, PaymentGateway } from "@policy/domain/clients/gateways";
 import type { Pool, Tx } from "../db/pool.js";
 import { NonRetryableError } from "@policy/domain/errors";
+import { documentIdempotencyKey, paymentIdempotencyKey } from "@policy/domain/idempotency";
 import type { PricingEngine } from "@policy/domain/pricing";
 import { isTerminal, progressOf, type WorkflowState } from "@policy/domain/stateMachine";
 import { noCrash, type CrashHook } from "@policy/domain/crash";
@@ -35,8 +36,7 @@ export interface WorkflowDeps {
   readonly crash?: CrashHook;
 }
 
-export const paymentIdempotencyKey = (workflowId: string) => `charge:${workflowId}`;
-export const documentIdempotencyKey = (workflowId: string) => `documents:${workflowId}`;
+export { documentIdempotencyKey, paymentIdempotencyKey };
 
 export function createStepHandlers(deps: WorkflowDeps): Record<string, StepHandler> {
   const crash = deps.crash ?? noCrash;
