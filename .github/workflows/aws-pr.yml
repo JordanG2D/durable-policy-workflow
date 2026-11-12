@@ -13,6 +13,12 @@ jobs:
   synth-diff:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      AWS_REGION: us-east-1
+      AWS_DEFAULT_REGION: us-east-1
+      CDK_DEFAULT_REGION: us-east-1
+      AWS_EC2_METADATA_DISABLED: 'true'
+      CDK_DISABLE_VERSION_CHECK: '1'
     steps:
       - uses: actions/checkout@v4
         with:
@@ -40,9 +46,6 @@ jobs:
           fi
       - name: Validate candidate and compare offline templates
         working-directory: candidate
-        env:
-          AWS_EC2_METADATA_DISABLED: 'true'
-          CDK_DISABLE_VERSION_CHECK: '1'
         shell: bash
         run: |
           set -euo pipefail
