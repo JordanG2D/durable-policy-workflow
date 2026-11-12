@@ -36,16 +36,31 @@ export function createActivities(deps: ActivityDeps) {
     },
 
     async chargePayment(input: { workflowId: string; amountCents: number }): Promise<{ chargeId: string }> {
-      return step(Steps.charge, input.workflowId, async () => {
-        const { chargeId } = await deps.payments.charge({
-          idempotencyKey: paymentIdempotencyKey(input.workflowId),
-          reference: input.workflowId,
-          amountCents: input.amountCents,
-          callbackUrl: deps.paymentCallbackUrl,
+      // The workflow cancels this activity when the provider's callback confirms
+      // the payment first. Cancellation reaches an activity only through its
+      // heartbeats, so heartbeat while the call is in flight and abort the HTTP
+      // call when cancelled. (The charge itself cannot be recalled; the
+      // idempotency key makes any later repeat a replay.)
+      const ctx = Context.current();
+      ctx.heartbeat();
+      const beat = setInterval(() => ctx.heartbeat(), 50);
+      try {
+        return await step(Steps.charge, input.workflowId, async () => {
+          const { chargeId } = await deps.payments.charge(
+            {
+              idempotencyKey: paymentIdempotencyKey(input.workflowId),
+              reference: input.workflowId,
+              amountCents: input.amountCents,
+              callbackUrl: deps.paymentCallbackUrl,
+            },
+            { signal: ctx.cancellationSignal },
+          );
+          crash(`after-side-effect:${Steps.charge}`);
+          return { chargeId };
         });
-        crash(`after-side-effect:${Steps.charge}`);
-        return { chargeId };
-      });
+      } finally {
+        clearInterval(beat);
+      }
     },
 
     async issuePolicy(input: { workflowId: string; premiumCents: number }): Promise<{ policyNumber: string }> {

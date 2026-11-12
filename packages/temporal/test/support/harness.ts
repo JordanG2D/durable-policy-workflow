@@ -121,6 +121,7 @@ export async function startTemporalHarness(config?: PolicyWorkflowConfig): Promi
         workflowBundle: bundle,
         activities: h.activityDeps(opts.timeoutMs ?? 300, opts.pricing ? { pricing: opts.pricing } : {}),
         stickyQueueScheduleToStartTimeoutMs: 1_000,
+        heartbeatThrottleMs: 50,
       });
       running.push({ worker, done: worker.run() });
       return worker;
@@ -128,10 +129,12 @@ export async function startTemporalHarness(config?: PolicyWorkflowConfig): Promi
     async waitUntilSettled(workflowId, timeoutMs = 30_000) {
       const handle = env.client.workflow.getHandle(workflowId);
       const settled = env.supportsTimeSkipping
-        ? handle.result().then(
-            () => undefined,
-            () => undefined,
-          )
+        ? (async () => {
+            await handle.result().catch(() => undefined);
+            // Dead-lettered workflows fail by design; anything else (timed out, terminated) is a bug.
+            const status = (await handle.describe()).status.name;
+            if (status !== "COMPLETED" && status !== "FAILED") throw new Error(`workflow ${workflowId} closed as ${status}`);
+          })()
         : (async () => {
             for (;;) {
               const d = await handle.describe();

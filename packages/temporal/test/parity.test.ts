@@ -17,6 +17,7 @@ const parityWorkflowConfig: PolicyWorkflowConfig = {
   retry: { "quote.requested": retry, "policy.bound": retry, "payment.confirmed": retry, "policy.issued": retry },
   // One attempt may take at most this long; it is how a dead worker's attempt is detected.
   activityTimeoutMs: 2_000,
+  chargeHeartbeatTimeoutMs: 1_000,
   // The default 24h late-capture window is kept: time skipping makes it free.
 };
 

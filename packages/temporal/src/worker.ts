@@ -9,8 +9,9 @@ const runningFromSource = import.meta.url.endsWith(".ts");
  * Bundle the workflow code (webpack) once. Workers in the same process can
  * share the bundle; production workers can load one prebuilt at build time.
  */
-export async function bundleWorkflows(): Promise<WorkflowBundle> {
-  const workflowsPath = fileURLToPath(new URL(`./workflows.${runningFromSource ? "ts" : "js"}`, import.meta.url));
+export async function bundleWorkflows(
+  workflowsPath = fileURLToPath(new URL(`./workflows.${runningFromSource ? "ts" : "js"}`, import.meta.url)),
+): Promise<WorkflowBundle> {
   const { code } = await bundleWorkflowCode({
     workflowsPath,
     workflowInterceptorModules,
@@ -39,6 +40,8 @@ export interface CreateWorkerOptions {
    * to the shared queue. Low values make recovery from a dead worker faster.
    */
   readonly stickyQueueScheduleToStartTimeoutMs?: number;
+  /** Upper bound on how long the SDK batches heartbeats; lower means cancellations arrive sooner. */
+  readonly heartbeatThrottleMs?: number;
   /** Workflow cache size; 0 disables caching and sticky queues (every task replays from history). */
   readonly maxCachedWorkflows?: number;
 }
@@ -53,6 +56,9 @@ export function createWorker(opts: CreateWorkerOptions): Promise<Worker> {
     interceptors: { activity: activityInterceptors() },
     sinks: workflowSpanSinks(),
     ...(opts.identity ? { identity: opts.identity } : {}),
+    ...(opts.heartbeatThrottleMs
+      ? { maxHeartbeatThrottleInterval: opts.heartbeatThrottleMs, defaultHeartbeatThrottleInterval: opts.heartbeatThrottleMs }
+      : {}),
     ...(opts.maxCachedWorkflows !== undefined ? { maxCachedWorkflows: opts.maxCachedWorkflows } : {}),
     ...(opts.stickyQueueScheduleToStartTimeoutMs
       ? { stickyQueueScheduleToStartTimeout: opts.stickyQueueScheduleToStartTimeoutMs }

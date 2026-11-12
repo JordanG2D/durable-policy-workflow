@@ -8,8 +8,13 @@ export interface ChargeRequest {
   readonly callbackUrl: string;
 }
 
+export interface CallOptions {
+  /** Abort the call early (the caller no longer needs the answer). */
+  readonly signal?: AbortSignal;
+}
+
 export interface PaymentGateway {
-  charge(req: ChargeRequest): Promise<{ chargeId: string }>;
+  charge(req: ChargeRequest, opts?: CallOptions): Promise<{ chargeId: string }>;
 }
 
 export interface DeliveryRequest {
@@ -34,9 +39,9 @@ export interface PolicyGateway {
 
 export function httpPaymentGateway(baseUrl: string, timeoutMs: number): PaymentGateway {
   return {
-    charge: (req) =>
+    charge: (req, opts) =>
       inSpan("payment.charge", { "payment.reference": req.reference, "payment.amount_cents": req.amountCents }, () =>
-        postJson<{ chargeId: string }>(`${baseUrl}/charges`, req, timeoutMs),
+        postJson<{ chargeId: string }>(`${baseUrl}/charges`, req, timeoutMs, opts?.signal),
       ),
   };
 }

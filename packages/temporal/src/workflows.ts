@@ -51,6 +51,7 @@ export const DEFAULT_RETRY: Readonly<Record<ActivityStep, ActivityRetry>> = {
 export const NON_RETRYABLE_ERROR_TYPES = ["NonRetryableError", "IllegalTransitionError"];
 
 const DEFAULT_ACTIVITY_TIMEOUT_MS = 10_000;
+const DEFAULT_CHARGE_HEARTBEAT_TIMEOUT_MS = 5_000;
 const DEFAULT_LATE_CAPTURE_GRACE_MS = 24 * 60 * 60 * 1_000;
 
 type ActivityStep = typeof Steps.price | typeof Steps.charge | typeof Steps.issue | typeof Steps.deliver;
@@ -188,7 +189,10 @@ export async function policyIssuance(input: PolicyWorkflowInput): Promise<Policy
   const chargeScope = new CancellationScope();
   const charge = chargeScope
     .run(() =>
-      activitiesFor(Steps.charge, { cancellationType: ActivityCancellationType.WAIT_CANCELLATION_COMPLETED }).chargePayment({
+      activitiesFor(Steps.charge, {
+        cancellationType: ActivityCancellationType.WAIT_CANCELLATION_COMPLETED,
+        heartbeatTimeout: config.chargeHeartbeatTimeoutMs ?? DEFAULT_CHARGE_HEARTBEAT_TIMEOUT_MS,
+      }).chargePayment({
         workflowId,
         amountCents: premium,
       }),

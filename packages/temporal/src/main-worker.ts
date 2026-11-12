@@ -26,6 +26,7 @@ const worker = await createWorker({
     crash: crashHookFromEnv(),
   },
   stickyQueueScheduleToStartTimeoutMs: 2_000,
+  heartbeatThrottleMs: 1_000,
   ...(config.maxCachedWorkflows !== undefined ? { maxCachedWorkflows: config.maxCachedWorkflows } : {}),
 });
 

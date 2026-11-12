@@ -23,6 +23,8 @@ export interface PolicyWorkflowConfig {
   readonly retry?: Partial<Record<StepName, ActivityRetry>>;
   /** Start-to-close timeout for one activity attempt. A worker that dies mid-attempt is detected by this. */
   readonly activityTimeoutMs?: number;
+  /** Heartbeat timeout for the charge activity, which heartbeats so it can be cancelled promptly. */
+  readonly chargeHeartbeatTimeoutMs?: number;
   /**
    * How long a dead-lettered workflow stays open to catch a payment that
    * succeeds after we gave up (so it can be flagged for refund).
