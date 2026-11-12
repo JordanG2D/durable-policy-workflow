@@ -19,6 +19,11 @@ if (!process.argv.includes('--apply')) {
 }
 if (process.env.AWS_BOOTSTRAP_APPROVED !== 'true') throw new Error('Persistent-access approval required: set AWS_BOOTSTRAP_APPROVED=true only after reviewing and approving this exact bootstrap.');
 if (process.env.AWS_REGION && process.env.AWS_REGION !== region) throw new Error('Only us-east-1 is authorized.');
+const githubOwnerId = process.env.POLICY_GITHUB_OWNER_ID;
+const githubRepositoryId = process.env.POLICY_GITHUB_REPOSITORY_ID;
+if (!githubOwnerId || !/^[0-9]+$/.test(githubOwnerId) || !githubRepositoryId || !/^[0-9]+$/.test(githubRepositoryId)) {
+  throw new Error('Applying bootstrap requires verified numeric POLICY_GITHUB_OWNER_ID and POLICY_GITHUB_REPOSITORY_ID inputs.');
+}
 const identity = await new STSClient({ region }).send(new GetCallerIdentityCommand({}));
 if (!identity.Account) throw new Error('Unable to identify AWS account.');
 const budgets = new BudgetsClient({ region });
@@ -53,7 +58,12 @@ for (const entry of providers.OpenIDConnectProviderList ?? []) {
   }
 }
 await cfn.send(new CreateStackCommand({ StackName: 'PolicyDemoBootstrap', TemplateBody: JSON.stringify(template), Capabilities: ['CAPABILITY_NAMED_IAM'],
-  Parameters: [ { ParameterKey: 'ExistingOidcProviderArn', ParameterValue: existingProvider }, { ParameterKey: 'BudgetName', ParameterValue: budgetName } ],
+  Parameters: [
+    { ParameterKey: 'ExistingOidcProviderArn', ParameterValue: existingProvider },
+    { ParameterKey: 'BudgetName', ParameterValue: budgetName },
+    { ParameterKey: 'RepositoryOwnerId', ParameterValue: githubOwnerId },
+    { ParameterKey: 'RepositoryId', ParameterValue: githubRepositoryId },
+  ],
   Tags: [{ Key: 'Project', Value: 'PolicyDemo' }], OnFailure: 'ROLLBACK',
 }));
 await waitUntilStackCreateComplete({ client: cfn, maxWaitTime: 1200 }, { StackName: 'PolicyDemoBootstrap' });

@@ -21,6 +21,8 @@ export const template = {
   Description: 'Approved temporary policy demo deployment access and ZIP assets. No runtime resources.',
   Parameters: {
     Repository: { Type: 'String', Default: 'JordanG2D/durable-policy-workflow', AllowedPattern: '[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+' },
+    RepositoryOwnerId: { Type: 'String', AllowedPattern: '[0-9]+', Description: 'Public immutable GitHub repository owner ID' },
+    RepositoryId: { Type: 'String', AllowedPattern: '[0-9]+', Description: 'Public immutable GitHub repository ID' },
     Branch: { Type: 'String', Default: 'main', AllowedPattern: '[A-Za-z0-9_./-]+' },
     ExistingOidcProviderArn: { Type: 'String', Default: '' },
     BudgetName: { Type: 'String', Default: 'portfolio-demo-budget' },
@@ -113,7 +115,7 @@ export const template = {
       allow(['apigateway:POST','apigateway:PATCH','apigateway:DELETE'], ['integrations','routes','stages'].flatMap(kind => [sub(`arn:\${AWS::Partition}:apigateway:us-east-1::/apis/*/${kind}`), sub(`arn:\${AWS::Partition}:apigateway:us-east-1::/apis/*/${kind}/*`)])),
     ]) }] } },
     GithubRole: { Type: 'AWS::IAM::Role', Properties: { RoleName: 'policy-demo-github', Path: '/policy-demo/', MaxSessionDuration: 3600, Tags: tags,
-      AssumeRolePolicyDocument: policy([{ Effect: 'Allow', Principal: { Federated: { 'Fn::If': ['CreateProvider', ref('GithubProvider'), ref('ExistingOidcProviderArn')] } }, Action: 'sts:AssumeRoleWithWebIdentity', Condition: { StringEquals: { 'token.actions.githubusercontent.com:aud': 'sts.amazonaws.com', 'token.actions.githubusercontent.com:sub': sub('repo:${Repository}:ref:refs/heads/${Branch}') } } }]),
+      AssumeRolePolicyDocument: policy([{ Effect: 'Allow', Principal: { Federated: { 'Fn::If': ['CreateProvider', ref('GithubProvider'), ref('ExistingOidcProviderArn')] } }, Action: 'sts:AssumeRoleWithWebIdentity', Condition: { StringEquals: { 'token.actions.githubusercontent.com:aud': 'sts.amazonaws.com', 'token.actions.githubusercontent.com:sub': { 'Fn::Sub': ['repo:${OwnerName}@${RepositoryOwnerId}/${RepositoryName}@${RepositoryId}:ref:refs/heads/${Branch}', { OwnerName: { 'Fn::Select': [0, { 'Fn::Split': ['/', ref('Repository')] }] }, RepositoryName: { 'Fn::Select': [1, { 'Fn::Split': ['/', ref('Repository')] }] } }] } } } }]),
       Policies: [{ PolicyName: 'DeployAndVerifyOnlyDemo', PolicyDocument: policy([
         allow(['cloudformation:CreateStack','cloudformation:UpdateStack','cloudformation:DeleteStack','cloudformation:CreateChangeSet','cloudformation:ExecuteChangeSet','cloudformation:DeleteChangeSet','cloudformation:DescribeChangeSet','cloudformation:DescribeStacks','cloudformation:DescribeStackEvents','cloudformation:DescribeStackResources','cloudformation:ListStackResources','cloudformation:GetTemplate'], stack),
         allow(['cloudformation:DescribeChangeSet','cloudformation:ExecuteChangeSet','cloudformation:DeleteChangeSet'], arn('cloudformation','changeSet/demo-*/*')),

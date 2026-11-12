@@ -14,7 +14,22 @@ test('OIDC trust binds audience, exact repository and main branch', () => {
   const trust = template.Resources.GithubRole.Properties.AssumeRolePolicyDocument.Statement[0];
   assert.equal(trust.Action, 'sts:AssumeRoleWithWebIdentity');
   assert.equal(trust.Condition.StringEquals['token.actions.githubusercontent.com:aud'], 'sts.amazonaws.com');
-  assert.equal(trust.Condition.StringEquals['token.actions.githubusercontent.com:sub']['Fn::Sub'], 'repo:${Repository}:ref:refs/heads/${Branch}');
+  const [subject, names] = trust.Condition.StringEquals['token.actions.githubusercontent.com:sub']['Fn::Sub'];
+  assert.equal(subject, 'repo:${OwnerName}@${RepositoryOwnerId}/${RepositoryName}@${RepositoryId}:ref:refs/heads/${Branch}');
+  assert.deepEqual(names, {
+    OwnerName: { 'Fn::Select': [0, { 'Fn::Split': ['/', { Ref: 'Repository' }] }] },
+    RepositoryName: { 'Fn::Select': [1, { 'Fn::Split': ['/', { Ref: 'Repository' }] }] },
+  });
+  const defaults = Object.fromEntries(Object.entries(template.Parameters).map(([key, value]) => [key, value.Default]));
+  const [OwnerName, RepositoryName] = defaults.Repository.split('/');
+  assert.equal(Object.hasOwn(template.Parameters.RepositoryOwnerId, 'Default'), false);
+  assert.equal(Object.hasOwn(template.Parameters.RepositoryId, 'Default'), false);
+  const values = { ...defaults, OwnerName, RepositoryName, RepositoryOwnerId: '0', RepositoryId: '0' };
+  const resolved = subject.replace(/\$\{([^}]+)\}/g, (_, key) => values[key]);
+  assert.equal(resolved, 'repo:JordanG2D@0/durable-policy-workflow@0:ref:refs/heads/main');
+  assert.equal(resolved.includes('*'), false);
+  assert.equal(trust.Condition.StringLike, undefined);
+  assert.deepEqual(trust.Principal.Federated, { 'Fn::If': ['CreateProvider', { Ref: 'GithubProvider' }, { Ref: 'ExistingOidcProviderArn' }] });
   assert.equal(template.Parameters.Branch.Default, 'main');
 });
 test('execution role requires boundary for role creation and cannot change bootstrap roles', () => {

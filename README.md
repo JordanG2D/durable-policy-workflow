@@ -623,12 +623,23 @@ HTTP API route/integration/stage paths cannot be restricted to an ID before it e
 this documented child-resource exception is limited to the CloudFormation
 service role and us-east-1.
 
+The apply example below requires the GitHub CLI (`gh`) to be installed and already
+authenticated for this repository. It captures the required IDs without printing
+them and keeps the environment variables inside a temporary subshell.
+
 ```sh
 npm ci
 npm run aws:bootstrap              # creates a local review template; no AWS calls
 # Only after reviewing and explicitly approving persistent access:
-AWS_REGION=us-east-1 AWS_BUDGET_NAME=portfolio-demo-budget \
-  AWS_BOOTSTRAP_APPROVED=true npm run aws:bootstrap -- --apply
+(
+  set -eu
+  set +x                          # do not trace captured values
+  POLICY_GITHUB_OWNER_ID="$(gh api repos/JordanG2D/durable-policy-workflow --jq '.owner.id')"
+  POLICY_GITHUB_REPOSITORY_ID="$(gh api repos/JordanG2D/durable-policy-workflow --jq '.id')"
+  export POLICY_GITHUB_OWNER_ID POLICY_GITHUB_REPOSITORY_ID
+  AWS_REGION=us-east-1 AWS_BUDGET_NAME=portfolio-demo-budget \
+    AWS_BOOTSTRAP_APPROVED=true npm run aws:bootstrap -- --apply
+)
 ```
 
 Bootstrap refuses an existing stack rather than silently expanding its IAM
@@ -638,6 +649,24 @@ only to ignored `infra/.state/bootstrap-outputs.json`, with owner-only access.
 Set the repository Actions variable **POLICY_DEMO_ROLE_ARN** to its
 `GithubRoleArn`. This value is not a secret, but it is kept out of the public
 repository. No long-lived AWS key belongs in GitHub.
+
+The trust policy uses GitHub's [immutable repository subject](https://docs.github.com/en/actions/reference/security/oidc#immutable-subject-claims), not the legacy
+name-only subject. `Repository` still supplies the owner/repository names;
+`RepositoryOwnerId` and `RepositoryId` are required parameters with no defaults.
+Supply the verified public numeric IDs privately through the deployment parameters
+or the required `POLICY_GITHUB_OWNER_ID` and `POLICY_GITHUB_REPOSITORY_ID`
+environment inputs shown above; do not commit account or repository IDs. The
+subject is exactly `repo:OWNER@OWNER_ID/REPOSITORY@REPOSITORY_ID:ref:refs/heads/main`,
+with audience `sts.amazonaws.com`. There is no wildcard or legacy fallback.
+Before creating or correcting trust, inspect the authenticated GitHub endpoint
+`GET /repos/JordanG2D/durable-policy-workflow/actions/oidc/customization/sub` and
+confirm `use_immutable_subject` and `sub_claim_prefix` match these parameters.
+Then compare the IAM role's subject, audience and provider to the reviewed
+template. A successful read of this GitHub endpoint is not an AWS authentication
+test: verify the manual workflow actually assumes the role. Existing trust-policy
+corrections require separate approval; generating this template changes nothing
+in AWS. If the repository moves or its OIDC subject configuration changes, review
+all names/IDs and the exact subject again rather than broadening trust.
 
 Once the role exists, notify the owner. **Verify a manual OIDC workflow before
 removing the temporary `portfolio-bootstrap` IAM user**, so there is a working
