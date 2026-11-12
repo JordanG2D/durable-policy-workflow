@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { ReadableSpan } from "@opentelemetry/sdk-trace-base";
 import { Steps, WORKFLOW_SPAN_NAME, stepSpanName } from "@policy/domain/steps";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
@@ -79,10 +80,12 @@ export function defineParitySuite(createDriver: () => Promise<ParityDriver>): vo
 
     it("a repeated POST with the same Idempotency-Key returns the same workflow", async () => {
       await d.startWorker();
-      const first = await submit(d.apiUrl, { key: "parity-replay-key-1" });
-      const again = await submit(d.apiUrl, { key: "parity-replay-key-1" });
+      // Unique per run: a long-lived server (Temporal dev server, a reused database) remembers keys.
+      const key = `parity-replay-${randomUUID()}`;
+      const first = await submit(d.apiUrl, { key });
+      const again = await submit(d.apiUrl, { key });
       const conflict = await submit(d.apiUrl, {
-        key: "parity-replay-key-1",
+        key,
         body: { ...sampleApplication, businessName: "Someone Else" },
       });
       expect(first.status).toBe(202);
@@ -165,7 +168,7 @@ export function defineParitySuite(createDriver: () => Promise<ParityDriver>): vo
 
     it("a success that arrives after the workflow failed is flagged for refund, not silently resurrected", async () => {
       // Every charge response is a 500 although the first one captured; the callback lands after retries are exhausted.
-      d.fakes.payment.setFaults({ failAfterCaptureNext: 1_000, callbacks: true, callbackDelayMs: 1_500 });
+      d.fakes.payment.setFaults({ failAfterCaptureNext: 1_000, callbacks: true, callbackDelayMs: 4_000 });
       await d.startWorker();
       const id = await startWorkflow(d.apiUrl);
       await waitFor(() => d.fakes.payment.capturesFor(id) === 1, { what: "capture" });
