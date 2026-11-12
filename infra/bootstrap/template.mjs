@@ -79,7 +79,31 @@ export const template = {
       // Read tags before/after CFN tag propagation; UUIDs are service-generated.
       // A Project tag condition could block the initial stabilization lookup.
       allow(['lambda:ListTags'], arn('lambda','event-source-mapping:*'), region),
-      allow(['lambda:CreateEventSourceMapping','lambda:UpdateEventSourceMapping','lambda:DeleteEventSourceMapping','lambda:GetEventSourceMapping','lambda:ListEventSourceMappings','lambda:TagResource','lambda:UntagResource'], '*', region),
+      allow(['lambda:CreateEventSourceMapping'], '*', {
+        ArnEquals: { 'lambda:FunctionArn': arn('lambda','function:policy-demo-worker') },
+        StringEquals: { 'aws:RequestedRegion': 'us-east-1', 'aws:RequestTag/Project': 'PolicyDemo' },
+      }),
+      allow(['lambda:ListEventSourceMappings'], '*', region),
+      allow(['lambda:GetEventSourceMapping'], arn('lambda','event-source-mapping:*'), {
+        ArnEquals: { 'lambda:FunctionArn': arn('lambda','function:policy-demo-worker') },
+        StringEquals: { 'aws:RequestedRegion': 'us-east-1' },
+      }),
+      allow(['lambda:UpdateEventSourceMapping','lambda:DeleteEventSourceMapping'], arn('lambda','event-source-mapping:*'), {
+        ArnEquals: { 'lambda:FunctionArn': arn('lambda','function:policy-demo-worker') },
+        StringEquals: { 'aws:RequestedRegion': 'us-east-1', 'aws:ResourceTag/Project': 'PolicyDemo' },
+      }),
+      // Tag APIs do not expose FunctionArn. Allow initial tagging of untagged
+      // UUID-based mappings, but never overwrite another Project value.
+      allow(['lambda:TagResource'], arn('lambda','event-source-mapping:*'), {
+        StringEquals: { 'aws:RequestedRegion': 'us-east-1', 'aws:RequestTag/Project': 'PolicyDemo' },
+        StringEqualsIfExists: { 'aws:ResourceTag/Project': 'PolicyDemo' },
+        'ForAllValues:StringLike': { 'aws:TagKeys': ['Project', 'aws:cloudformation:*'] },
+      }),
+      allow(['lambda:UntagResource'], arn('lambda','event-source-mapping:*'), {
+        StringEquals: { 'aws:RequestedRegion': 'us-east-1', 'aws:ResourceTag/Project': 'PolicyDemo' },
+        'ForAllValues:StringNotEquals': { 'aws:TagKeys': ['Project'] },
+        Null: { 'aws:TagKeys': 'false' },
+      }),
       allow(['sqs:CreateQueue','sqs:DeleteQueue','sqs:GetQueueAttributes','sqs:SetQueueAttributes','sqs:GetQueueUrl','sqs:TagQueue','sqs:UntagQueue','sqs:ListQueueTags'], queues),
       allow(['scheduler:CreateSchedule','scheduler:UpdateSchedule','scheduler:DeleteSchedule','scheduler:GetSchedule'], arn('scheduler','schedule/default/policy-demo-*')),
       allow(['logs:CreateLogGroup','logs:DeleteLogGroup','logs:PutRetentionPolicy','logs:DeleteRetentionPolicy','logs:TagResource','logs:UntagResource','logs:TagLogGroup','logs:ListTagsForResource'], [logs, sub('arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/policy-demo-*:*')]),

@@ -62,3 +62,30 @@ test('execution role can read ESM tags without widening write authority or requi
     assert.ok([esmArn, 'arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:policy-demo-*'].includes(s.Resource['Fn::Sub']));
   }
 });
+
+test('ESM creation and lifecycle bind the worker; no wildcard Lambda tag writes', () => {
+  const statements = statement('ExecutionRole');
+  const worker = { 'Fn::Sub': 'arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:policy-demo-worker' };
+  const esm = 'arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:event-source-mapping:*';
+  for (const action of ['CreateEventSourceMapping','GetEventSourceMapping','UpdateEventSourceMapping','DeleteEventSourceMapping']) {
+    const grants = statements.filter(s => actions(s).includes(`lambda:${action}`));
+    assert.equal(grants.length, 1);
+    assert.deepEqual(grants[0].Condition.ArnEquals['lambda:FunctionArn'], worker);
+    assert.equal(grants[0].Condition.StringEquals['aws:RequestedRegion'], 'us-east-1');
+    if (action === 'CreateEventSourceMapping') {
+      assert.equal(grants[0].Resource, '*');
+      assert.equal(grants[0].Condition.StringEquals['aws:RequestTag/Project'], 'PolicyDemo');
+    } else assert.equal(grants[0].Resource['Fn::Sub'], esm);
+    if (['UpdateEventSourceMapping','DeleteEventSourceMapping'].includes(action)) assert.equal(grants[0].Condition.StringEquals['aws:ResourceTag/Project'], 'PolicyDemo');
+  }
+  for (const s of statements.filter(s => actions(s).some(a => ['lambda:TagResource','lambda:UntagResource'].includes(a)))) assert.notEqual(s.Resource, '*');
+  const tag = statements.find(s => actions(s).includes('lambda:TagResource') && s.Resource['Fn::Sub'] === esm);
+  assert.equal(tag.Condition.StringEquals['aws:RequestTag/Project'], 'PolicyDemo');
+  assert.equal(tag.Condition.StringEqualsIfExists['aws:ResourceTag/Project'], 'PolicyDemo');
+  assert.deepEqual(tag.Condition['ForAllValues:StringLike']['aws:TagKeys'], ['Project', 'aws:cloudformation:*']);
+  assert.equal(tag.Condition.ArnEquals, undefined);
+  const untag = statements.find(s => actions(s).includes('lambda:UntagResource') && s.Resource['Fn::Sub'] === esm);
+  assert.equal(untag.Condition.StringEquals['aws:ResourceTag/Project'], 'PolicyDemo');
+  assert.deepEqual(untag.Condition['ForAllValues:StringNotEquals']['aws:TagKeys'], ['Project']);
+  assert.equal(untag.Condition.Null['aws:TagKeys'], 'false');
+});

@@ -584,6 +584,16 @@ a CloudFormation service role and a runtime permissions boundary. It creates
 topic or extra VPC endpoint**. AWS may create the RDS service-linked role and
 service-managed ENIs. Stop if anything outside this inventory is needed.
 
+**Lambda quota preflight:** this stack reserves six concurrent executions
+(API 2, worker 2, publisher 1, migration 1). Lambda requires 100 executions to
+remain unreserved, so the account's applied regional concurrency quota must be
+at least **106** before deployment. Fresh accounts can start with a quota of 10,
+which blocks this configuration. The AWS quota-request console currently requires
+a minimum request of 1,000, although this stack itself needs only 106. Obtain owner
+approval for the amount accepted by that form and confirm the increase is applied
+in us-east-1 before deploying. Keep the function caps in place rather than removing
+them to bypass the quota check.
+
 The GitHub role cannot create/update the bootstrap stack or assume its execution
 role directly. It can pass that role only to CloudFormation. Runtime roles are
 restricted to `/policy-demo/runtime/` and must carry the approved permissions
@@ -591,8 +601,24 @@ boundary. Network creation requires the project tag; network modifications are
 restricted to that tag. Some AWS create/list APIs have no pre-existing resource
 identifier, and their permissions use service/region constraints rather than
 claiming every permission can have a resource-specific ARN. Review the complete
-policy in `infra/bootstrap/template.mjs` before granting access. HTTP API
-route/integration/stage paths cannot be restricted to an ID before it exists;
+policy in `infra/bootstrap/template.mjs` before granting access.
+
+Event-source mapping create/get/update/delete permissions bind the exact
+`policy-demo-worker` function; update/delete additionally require its Project tag.
+The tag APIs do not support a function-ARN condition, so initial tagging is an
+explicit exception: the execution role can set `Project=PolicyDemo` on an untagged
+mapping in this account and region, even one belonging to another function. It
+cannot overwrite another Project value. Tag writes are restricted to Project and
+CloudFormation's reserved system-tag namespace; removing Project is not allowed.
+Tagging alone does not grant mapping lifecycle access to other functions. Read-only
+mapping listing and tag lookup cover the account's us-east-1 mappings to support
+CloudFormation discovery and initial stabilization. Do not remove/change Project
+or add arbitrary mapping tags in stack updates without reviewing this policy.
+These conditions follow the [Lambda authorization reference](https://docs.aws.amazon.com/service-authorization/latest/reference/list_lambda.html)
+and [event-source mapping tagging guide](https://docs.aws.amazon.com/lambda/latest/dg/tags-esm.html);
+local policy assertions do not substitute for a live CloudFormation lifecycle test.
+
+HTTP API route/integration/stage paths cannot be restricted to an ID before it exists;
 this documented child-resource exception is limited to the CloudFormation
 service role and us-east-1.
 
