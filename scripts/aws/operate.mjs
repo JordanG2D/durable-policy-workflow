@@ -16,7 +16,7 @@ import { CloudWatchClient, DescribeAlarmsCommand } from '@aws-sdk/client-cloudwa
 import { ApiGatewayV2Client, GetApisCommand } from '@aws-sdk/client-apigatewayv2';
 import { SchedulerClient, ListSchedulesCommand } from '@aws-sdk/client-scheduler';
 import { IAMClient, ListRolesCommand } from '@aws-sdk/client-iam';
-import { assertScope, cfn, outputs, poll, prefix, readStack, region, reportError, requireBudget, stackName } from './common.mjs';
+import { assertScope, awsRead, cfn, outputs, poll, prefix, readStack, region, reportError, requireBudget, stackName } from './common.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const assembly = resolve(root, 'infra/cdk.out');
@@ -101,7 +101,7 @@ async function collect(client, Command, input, field, inputToken = 'NextToken', 
   const all = [];
   let token;
   for (let page = 0; page < 1000; page++) {
-    const result = await client.send(new Command({ ...input, ...(token ? { [inputToken]: token } : {}) }));
+    const result = await awsRead(client, new Command({ ...input, ...(token ? { [inputToken]: token } : {}) }));
     all.push(...(result[field] || []));
     token = result[outputToken];
     if (!token) return all;
@@ -170,9 +170,9 @@ async function destroy() {
       if (await readStack()) await cfn().send(new DeleteStackCommand({ StackName: stackName, RoleARN: role }));
       await poll('Runtime destruction', readStack, x => { if (x?.StackStatus === 'DELETE_FAILED') throw new Error('Stack deletion failed. Residual resources require inspection.'); return !x; }, { timeoutMs: 2_400_000 });
     }
-  } catch { failures.push('runtime stack deletion failed or timed out'); }
+  } catch (error) { failures.push(error.name === 'SafeAwsReadError' ? error.message : 'runtime stack deletion failed or timed out'); }
   // Still remove only dedicated-prefix assets and inventory residuals after a stack failure.
-  try { await cleanAssets(bucket); } catch { failures.push('asset cleanup failed'); }
+  try { await cleanAssets(bucket); } catch (error) { failures.push(error.name === 'SafeAwsReadError' ? error.message : 'asset cleanup failed'); }
   try { await verifyClean(bucket, failures.length === 0); } catch (error) { failures.push(error.$metadata ? 'residual inventory could not be completed' : error.message); }
   if (failures.length) throw new Error(`Cleanup incomplete: ${failures.join('; ')}. Inspect AWS privately and retry destroy.`);
 }
@@ -180,7 +180,10 @@ async function verifyClean(bucket, retry = false) {
   assertScope();
   bucket ||= (await bootstrap()).bucket;
   let found;
-  if (retry) await poll('Residual resource cleanup', async () => (found = await residuals(bucket)), x => x.length === 0, { timeoutMs: 300_000, intervalMs: 15_000 }).catch(() => { throw new Error(`Cleanup not verified; residual categories: ${found?.join(', ') || 'inventory check incomplete'}.`); });
+  if (retry) await poll('Residual resource cleanup', async () => (found = await residuals(bucket)), x => x.length === 0, { timeoutMs: 300_000, intervalMs: 15_000 }).catch(error => {
+    if (error.name === 'SafeAwsReadError') throw error;
+    throw new Error(`Cleanup not verified; residual categories: ${found?.join(', ') || 'inventory check incomplete'}.`);
+  });
   else { found = await residuals(bucket); if (found.length) throw new Error(`Residual demo resources: ${found.join(', ')}.`); }
   console.log('Runtime cleanup verified: no demo database, snapshots/backups, DB subnet groups, endpoints/VPC, functions/mappings, queues, API, schedules, alarms, runtime roles, logs, generated secret, or asset objects remain. Empty bootstrap bucket, bootstrap IAM/OIDC, and budget remain until separately requested full teardown.');
 }
