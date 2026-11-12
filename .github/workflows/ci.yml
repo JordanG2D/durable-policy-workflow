@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   static:
-    name: Typecheck, lint, unit tests
+    name: Typecheck, lint, unit tests, build
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -29,8 +29,8 @@ jobs:
       - run: npm run test:unit
       - run: npm run build
 
-  integration:
-    name: Integration and fault-injection tests (Postgres)
+  handbuilt:
+    name: Hand-built - integration, fault-injection and parity suites (Postgres)
     runs-on: ubuntu-latest
     timeout-minutes: 15
     services:
@@ -57,8 +57,8 @@ jobs:
       - run: npm ci
       - run: npm run test:integration
 
-  compose-smoke:
-    name: docker compose up + smoke test
+  temporal-time-skipping:
+    name: Temporal - parity, workflow and replay suites (time-skipping test server)
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -66,10 +66,48 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: 22
-      - run: docker compose up --build -d --wait
-      - run: node scripts/smoke.mjs http://localhost:3000
+          cache: npm
+      - run: npm ci
+      # The SDK downloads Temporal's time-skipping test server on first use.
+      - run: npm run test:temporal
+
+  temporal-dev-server:
+    name: Temporal - same suites against the dev server from docker compose
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      TEMPORAL_ADDRESS: localhost:7233
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: docker compose --profile temporal up -d --wait temporal
+      - run: npm ci
+      - run: npm run test:temporal
+      - name: Temporal server logs on failure
+        if: failure()
+        run: docker compose --profile temporal logs temporal
+      - run: docker compose --profile temporal down -v
+        if: always()
+
+  compose-smoke:
+    name: docker compose up (both stacks) + smoke tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - run: docker compose --profile temporal up --build -d --wait
+      - name: Smoke test, hand-built API
+        run: node scripts/smoke.mjs http://localhost:3000
+      - name: Smoke test, Temporal API
+        run: node scripts/smoke.mjs http://localhost:3100
       - name: Logs on failure
         if: failure()
-        run: docker compose logs
-      - run: docker compose down -v
+        run: docker compose --profile temporal logs
+      - run: docker compose --profile temporal down -v
         if: always()

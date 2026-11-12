@@ -38,10 +38,14 @@ for (;;) {
   if (Date.now() > deadline) throw new Error(`timed out in state ${wf.state}`);
   await new Promise((r) => setTimeout(r, 250));
 }
-const metrics = await (await fetch(`${base}/metrics`)).text();
-console.log(
-  metrics
-    .split("\n")
-    .filter((l) => /^workflows_started_total|^outbox_/.test(l))
-    .join("\n"),
-);
+// The hand-built API exposes Prometheus metrics; the Temporal API leaves metrics to Temporal.
+const metricsRes = await fetch(`${base}/metrics`);
+if (metricsRes.ok) {
+  const metrics = await metricsRes.text();
+  console.log(
+    metrics
+      .split("\n")
+      .filter((l) => /^workflows_started_total|^outbox_/.test(l))
+      .join("\n"),
+  );
+}
