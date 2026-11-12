@@ -15,9 +15,9 @@ import Fastify, { type FastifyInstance } from "fastify";
 export interface PaymentFaults {
   /** Respond 500 without capturing, for the next N requests. */
   failNext: number;
-  /** Capture, then respond 500 anyway (the client cannot tell it succeeded). */
+  /** Capture (or find the existing capture), then respond 500 anyway: the client cannot tell it succeeded. */
   failAfterCaptureNext: number;
-  /** Capture immediately but delay the response (client times out, success is "late"). */
+  /** Capture immediately but delay the first response (client times out, success is "late"). Replays answer at once. */
   responseDelayMs: number;
   /** Respond 402 card_declined for the next N requests. */
   declineNext: number;
@@ -123,30 +123,31 @@ export function createFakePaymentProvider(initial: Partial<PaymentFaults> = {}):
       return reply.code(500).send({ error: "internal_error" });
     }
 
-    const existing = byKey.get(idempotencyKey);
-    if (existing) {
-      if (existing.amountCents !== amountCents || existing.reference !== reference) {
+    let charge = byKey.get(idempotencyKey);
+    const replayed = charge !== undefined;
+    if (charge) {
+      if (charge.amountCents !== amountCents || charge.reference !== reference) {
         return reply.code(409).send({ error: "idempotency_key_reused_with_different_request" });
       }
-      return reply.send({ chargeId: existing.chargeId, status: "captured", replayed: true });
+    } else {
+      charge = {
+        chargeId: `ch_${randomUUID()}`,
+        idempotencyKey,
+        reference,
+        amountCents,
+        capturedAt: new Date().toISOString(),
+      };
+      byKey.set(idempotencyKey, charge);
+      if (faults.callbacks && callbackUrl) sendCallbacks(charge, callbackUrl);
     }
 
-    const charge: Charge = {
-      chargeId: `ch_${randomUUID()}`,
-      idempotencyKey,
-      reference,
-      amountCents,
-      capturedAt: new Date().toISOString(),
-    };
-    byKey.set(idempotencyKey, charge);
-    if (faults.callbacks && callbackUrl) sendCallbacks(charge, callbackUrl);
-
+    // Money has moved at this point, whatever the response says.
     if (faults.failAfterCaptureNext > 0) {
       faults.failAfterCaptureNext--;
       return reply.code(500).send({ error: "internal_error" });
     }
-    if (faults.responseDelayMs > 0) await sleep(faults.responseDelayMs);
-    return reply.send({ chargeId: charge.chargeId, status: "captured" });
+    if (faults.responseDelayMs > 0 && !replayed) await sleep(faults.responseDelayMs);
+    return reply.send({ chargeId: charge.chargeId, status: "captured", ...(replayed ? { replayed } : {}) });
   });
 
   app.put<{ Body: Partial<PaymentFaults> }>("/__faults", async (req) => {

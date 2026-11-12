@@ -207,12 +207,14 @@ export async function outboxSettled(pool: Pool, id: string): Promise<boolean> {
   return rows[0]?.n === "0";
 }
 
+/** Current value of a counter/gauge, or the observation count of a histogram, summed over matching labels. */
 export async function metricValue(app: App, name: string, labels: Record<string, string> = {}): Promise<number> {
   const metric = (await app.metrics.registry.getSingleMetric(name)?.get()) as
-    | { values: { value: number; labels: Record<string, string | number> }[] }
+    | { type: string; values: { value: number; metricName?: string; labels: Record<string, string | number> }[] }
     | undefined;
   if (!metric) return 0;
   return metric.values
+    .filter((v) => metric.type !== "histogram" || v.metricName === `${name}_count`)
     .filter((v) => Object.entries(labels).every(([k, val]) => v.labels[k] === val))
     .reduce((sum, v) => sum + v.value, 0);
 }
