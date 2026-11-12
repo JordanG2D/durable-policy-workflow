@@ -52,6 +52,9 @@ export const template = {
       allow(['s3:GetBucketLocation'], { 'Fn::GetAtt': ['Assets','Arn'] }),
       allow(['iam:CreateRole','iam:PutRolePermissionsBoundary'], runtime, { StringEquals: { 'iam:PermissionsBoundary': boundary } }),
       allow(['iam:GetRole','iam:DeleteRole','iam:PutRolePolicy','iam:GetRolePolicy','iam:DeleteRolePolicy','iam:TagRole','iam:UntagRole','iam:ListRolePolicies','iam:ListAttachedRolePolicies','iam:UpdateAssumeRolePolicy'], runtime),
+      // Reviewed recovery exception: absent-role cleanup authorization fallback.
+      // Only these exact root-path names; creation and policy writes remain path-bound.
+      allow(['iam:GetRole','iam:DeleteRole'], ['api','migration','publisher','worker','scheduler'].map(name => iamArn(`role/policy-demo-${name}`))),
       allow(['iam:PassRole'], runtime, { StringEquals: { 'iam:PassedToService': ['lambda.amazonaws.com','scheduler.amazonaws.com'] } }),
       allow(['iam:CreateServiceLinkedRole'], iamArn('role/aws-service-role/rds.amazonaws.com/AWSServiceRoleForRDS'), { StringEquals: { 'iam:AWSServiceName': 'rds.amazonaws.com' } }),
       allow(['ec2:Describe*'], '*', region),
@@ -108,6 +111,12 @@ export const template = {
       allow(['logs:DescribeLogGroups'], '*', region),
       allow(['cloudwatch:PutMetricAlarm','cloudwatch:DeleteAlarms','cloudwatch:DescribeAlarms','cloudwatch:TagResource','cloudwatch:UntagResource','cloudwatch:ListTagsForResource'], arn('cloudwatch','alarm:policy-demo-*')),
       allow(['apigateway:POST'], sub('arn:${AWS::Partition}:apigateway:us-east-1::/apis'), { StringEquals: { 'aws:RequestTag/Project': 'PolicyDemo', 'apigateway:Request/ApiName': 'policy-demo-api' } }),
+      // Reviewed recovery exception: observed encoded HTTP API tagging path.
+      // Request-tag conditions fail closed; live propagation still needs validation.
+      allow(['apigateway:POST'], sub('arn:${AWS::Partition}:apigateway:us-east-1::/tags/arn%3A${AWS::Partition}%3Aapigateway%3Aus-east-1%3A%3A%2Fv2%2Fapis%2F*'), {
+        StringEquals: { 'aws:RequestTag/Project': 'PolicyDemo' },
+        'ForAllValues:StringLike': { 'aws:TagKeys': ['Project', 'aws:cloudformation:*'] },
+      }),
       allow(['apigateway:GET'], sub('arn:${AWS::Partition}:apigateway:us-east-1::/apis*')),
       allow(['apigateway:PATCH','apigateway:DELETE'], sub('arn:${AWS::Partition}:apigateway:us-east-1::/apis/*'), { StringEquals: { 'aws:ResourceTag/Project': 'PolicyDemo' } }),
       // HTTP API child resources have no independently taggable identity. The
