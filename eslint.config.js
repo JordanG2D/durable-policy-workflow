@@ -11,6 +11,8 @@ export default tseslint.config(
     },
     rules: {
       "@typescript-eslint/no-floating-promises": "error",
+      // Fastify route handlers are idiomatically async even when they do not await.
+      "@typescript-eslint/require-await": "off",
       "@typescript-eslint/no-misused-promises": ["error", { checksVoidReturn: false }],
       "@typescript-eslint/no-unused-vars": ["error", { argsIgnorePattern: "^_" }],
     },
