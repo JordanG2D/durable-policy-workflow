@@ -5,6 +5,7 @@ import { BudgetsClient, DescribeBudgetCommand, DescribeNotificationsForBudgetCom
 import { IAMClient, ListOpenIDConnectProvidersCommand, GetOpenIDConnectProviderCommand } from '@aws-sdk/client-iam';
 import { STSClient, GetCallerIdentityCommand } from '@aws-sdk/client-sts';
 import { template } from '../../infra/bootstrap/template.mjs';
+import { notificationThresholdUsd } from './common.mjs';
 
 const region = 'us-east-1';
 const budgetName = process.env.AWS_BUDGET_NAME ?? 'portfolio-demo-budget';
@@ -34,7 +35,7 @@ if (Budget?.BudgetType !== 'COST' || Budget.TimeUnit !== 'MONTHLY' || Number(Bud
 const notices = await budgets.send(new DescribeNotificationsForBudgetCommand({ AccountId: identity.Account, BudgetName: budgetName }));
 let hasEmail = false;
 for (const notification of notices.Notifications ?? []) {
-  const threshold = notification.ThresholdType === 'PERCENTAGE' ? Number(notification.Threshold) / 100 * 5 : Number(notification.Threshold);
+  const threshold = notificationThresholdUsd(notification, { verifiedLegacyBudgetName: budgetName });
   if (notification.NotificationType !== 'ACTUAL' || notification.ComparisonOperator !== 'GREATER_THAN' || !Number.isFinite(threshold) || threshold > 5 || threshold <= 0) continue;
   const result = await budgets.send(new DescribeSubscribersForNotificationCommand({ AccountId: identity.Account, BudgetName: budgetName, Notification: notification }));
   hasEmail ||= (result.Subscribers ?? []).some((subscriber) => subscriber.SubscriptionType === 'EMAIL');
