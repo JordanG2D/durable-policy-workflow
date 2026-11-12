@@ -76,6 +76,9 @@ export const template = {
       allow(['secretsmanager:CreateSecret','secretsmanager:DeleteSecret','secretsmanager:DescribeSecret','secretsmanager:GetSecretValue','secretsmanager:PutSecretValue','secretsmanager:UpdateSecret','secretsmanager:TagResource','secretsmanager:UntagResource','secretsmanager:GetResourcePolicy','secretsmanager:PutResourcePolicy','secretsmanager:DeleteResourcePolicy'], secrets),
       allow(['secretsmanager:GetRandomPassword'], '*', region),
       allow(['lambda:CreateFunction','lambda:UpdateFunctionCode','lambda:UpdateFunctionConfiguration','lambda:DeleteFunction','lambda:GetFunction','lambda:GetFunctionConfiguration','lambda:AddPermission','lambda:RemovePermission','lambda:GetPolicy','lambda:TagResource','lambda:UntagResource','lambda:ListTags','lambda:PutFunctionConcurrency','lambda:DeleteFunctionConcurrency','lambda:GetFunctionConcurrency'], functions),
+      // Read tags before/after CFN tag propagation; UUIDs are service-generated.
+      // A Project tag condition could block the initial stabilization lookup.
+      allow(['lambda:ListTags'], arn('lambda','event-source-mapping:*'), region),
       allow(['lambda:CreateEventSourceMapping','lambda:UpdateEventSourceMapping','lambda:DeleteEventSourceMapping','lambda:GetEventSourceMapping','lambda:ListEventSourceMappings','lambda:TagResource','lambda:UntagResource'], '*', region),
       allow(['sqs:CreateQueue','sqs:DeleteQueue','sqs:GetQueueAttributes','sqs:SetQueueAttributes','sqs:GetQueueUrl','sqs:TagQueue','sqs:UntagQueue','sqs:ListQueueTags'], queues),
       allow(['scheduler:CreateSchedule','scheduler:UpdateSchedule','scheduler:DeleteSchedule','scheduler:GetSchedule'], arn('scheduler','schedule/default/policy-demo-*')),

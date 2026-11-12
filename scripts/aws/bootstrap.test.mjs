@@ -50,3 +50,15 @@ test('IAM inline and managed policies have room below their size quotas', () => 
     if (r.Type === 'AWS::IAM::Role') assert.ok(JSON.stringify(r.Properties.Policies ?? []).length < 10000);
   }
 });
+
+test('execution role can read ESM tags without widening write authority or requiring preexisting tags', () => {
+  const esmArn = 'arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:event-source-mapping:*';
+  const esmReads = statement('ExecutionRole').filter(s => actions(s).includes('lambda:ListTags') && s.Resource?.['Fn::Sub'] === esmArn);
+  assert.equal(esmReads.length, 1);
+  assert.deepEqual(actions(esmReads[0]), ['lambda:ListTags']);
+  assert.deepEqual(esmReads[0].Condition, { StringEquals: { 'aws:RequestedRegion': 'us-east-1' } });
+  for (const s of statement('ExecutionRole').filter(s => actions(s).includes('lambda:ListTags'))) {
+    assert.notEqual(s.Resource, '*');
+    assert.ok([esmArn, 'arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:policy-demo-*'].includes(s.Resource['Fn::Sub']));
+  }
+});
