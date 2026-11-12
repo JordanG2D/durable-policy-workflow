@@ -121,3 +121,24 @@ test('API tag POST is encoded HTTP-only with fail-closed request tags, no untag'
     'ForAllValues:StringLike': { 'aws:TagKeys': ['Project', 'aws:cloudformation:*'] },
   });
 });
+
+test('stage tagging grant is collection-only and fail-closed', () => {
+  const grants = statement('ExecutionRole').filter(s => actions(s).includes('apigateway:TagResource'));
+  assert.equal(grants.length, 1);
+  assert.deepEqual(grants[0].Action, ['apigateway:TagResource']);
+  assert.equal(grants[0].Resource['Fn::Sub'], 'arn:${AWS::Partition}:apigateway:us-east-1::/apis/*/stages');
+  assert.deepEqual(grants[0].Condition, {
+    StringEquals: { 'aws:RequestTag/Project': 'PolicyDemo' },
+    'ForAllValues:StringLike': { 'aws:TagKeys': ['Project', 'aws:cloudformation:*'] },
+  });
+  assert.equal(statement('ExecutionRole').some(s => actions(s).includes('apigateway:UntagResource')), false);
+});
+
+test('Lambda configuration inspection adds exactly four reads on demo functions only', () => {
+  const expected = ['lambda:GetFunctionCodeSigningConfig','lambda:GetFunctionRecursionConfig','lambda:GetRuntimeManagementConfig','lambda:GetFunctionScalingConfig'];
+  const grants = statement('ExecutionRole').filter(s => actions(s).some(a => expected.includes(a)));
+  assert.equal(grants.length, 1);
+  assert.deepEqual(grants[0].Action, expected);
+  assert.equal(grants[0].Resource['Fn::Sub'], 'arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:policy-demo-*');
+  assert.ok(grants[0].Action.every(a => a.startsWith('lambda:Get')));
+});
