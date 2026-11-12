@@ -18,7 +18,13 @@ export default tseslint.config(
     },
   },
   {
-    files: ["eslint.config.js"],
+    files: ["eslint.config.js", "scripts/**/*.mjs"],
     ...tseslint.configs.disableTypeChecked,
+  },
+  {
+    files: ["scripts/**/*.mjs"],
+    languageOptions: {
+      globals: { console: "readonly", fetch: "readonly", process: "readonly", setTimeout: "readonly" },
+    },
   },
 );

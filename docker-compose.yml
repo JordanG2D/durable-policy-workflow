@@ -1,0 +1,67 @@
+# One command: `docker compose up --build`
+# API on http://localhost:3000, two workers, Postgres, and the fake payment/document services.
+name: policy-workflow
+
+x-app: &app
+  image: durable-policy-workflow:local
+  restart: unless-stopped
+  depends_on:
+    postgres:
+      condition: service_healthy
+    fakes:
+      condition: service_started
+  healthcheck:
+    test: ["CMD", "node", "-e", "fetch('http://localhost:3000/readyz').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+    interval: 3s
+    timeout: 3s
+    retries: 20
+
+x-app-env: &app-env
+  DATABASE_URL: postgres://postgres:postgres@postgres:5432/policy_workflow
+  PAYMENT_PROVIDER_URL: http://fakes:4001
+  DOCUMENT_SERVICE_URL: http://fakes:4002
+  PAYMENT_CALLBACK_URL: http://api:3000/webhooks/payments
+  LOG_LEVEL: info
+  OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres # local development only
+      POSTGRES_DB: policy_workflow
+    # Override with POSTGRES_PORT if you already run Postgres locally.
+    ports: ["${POSTGRES_PORT:-5432}:5432"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d policy_workflow"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  # Builds the shared image; the other services reuse it.
+  fakes:
+    build: .
+    image: durable-policy-workflow:local
+    command: ["node", "dist/src/fakes/main.js"]
+    environment:
+      # Example: FAKE_PAYMENT_FAULTS='{"responseDelayMs":3000}' docker compose up
+      FAKE_PAYMENT_FAULTS: ${FAKE_PAYMENT_FAULTS:-}
+      FAKE_DOCUMENT_FAULTS: ${FAKE_DOCUMENT_FAULTS:-}
+    ports: ["4001:4001", "4002:4002"]
+
+  api:
+    <<: *app
+    environment:
+      <<: *app-env
+      ROLE: api
+    ports: ["3000:3000"]
+
+  worker:
+    <<: *app
+    environment:
+      <<: *app-env
+      ROLE: worker
+    # Two workers compete for the same outbox: SKIP LOCKED + leases keep them honest.
+    deploy:
+      replicas: 2
