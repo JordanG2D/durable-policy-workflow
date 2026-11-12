@@ -1,0 +1,5 @@
+[
+  "policy-demo-dlq-depth",
+  "policy-demo-lambda-error-rate",
+  "policy-demo-outbox-lag"
+]

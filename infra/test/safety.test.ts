@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { App, aws_lambda as lambda } from 'aws-cdk-lib';
 import { Template, Match } from 'aws-cdk-lib/assertions';
 import { DemoStack } from '../lib/demo-stack.js';
@@ -9,6 +10,7 @@ interface Statement { Action: string | string[]; Resource: unknown; Condition: {
 interface Resource {
   Type: string; DeletionPolicy: string; UpdateReplacePolicy: string;
   Properties: {
+    AlarmName: string;
     MapPublicIpOnLaunch: boolean; SubnetIds: unknown[];
     VpcConfig: { SubnetIds: unknown[] }; PolicyDocument: { Statement: Statement[] };
     ToPort: number; DestinationSecurityGroupId: unknown; Runtime: string; Architectures: string[];
@@ -20,6 +22,10 @@ interface Resource {
 }
 const json = template.toJSON() as { Resources: Record<string, Resource> };
 const resources = (type: string): Resource[] => Object.values(json.Resources).filter(r => r.Type === type);
+void test('cleanup alarm inventory exactly matches synthesized metric alarm names', () => {
+  const cleanupNames = JSON.parse(readFileSync(new URL('../../scripts/aws/alarm-names.json', import.meta.url), 'utf8')) as string[];
+  assert.deepEqual([...cleanupNames].sort(), resources('AWS::CloudWatch::Alarm').map(r => r.Properties.AlarmName).sort());
+});
 void test('only the approved resource types; no hidden provider, NAT, gateway, ECR or extra endpoint', () => {
   const allowed = new Set(['AWS::EC2::VPC', 'AWS::EC2::Subnet', 'AWS::EC2::RouteTable', 'AWS::EC2::SubnetRouteTableAssociation', 'AWS::EC2::SecurityGroup', 'AWS::EC2::SecurityGroupIngress', 'AWS::EC2::SecurityGroupEgress', 'AWS::EC2::VPCEndpoint', 'AWS::SecretsManager::Secret', 'AWS::RDS::DBSubnetGroup', 'AWS::RDS::DBInstance', 'AWS::SQS::Queue', 'AWS::Logs::LogGroup', 'AWS::IAM::Role', 'AWS::IAM::Policy', 'AWS::Lambda::Function', 'AWS::Lambda::Permission', 'AWS::Lambda::EventSourceMapping', 'AWS::Scheduler::Schedule', 'AWS::ApiGatewayV2::Api', 'AWS::ApiGatewayV2::Integration', 'AWS::ApiGatewayV2::Route', 'AWS::ApiGatewayV2::Stage', 'AWS::CloudWatch::Alarm']);
   for (const r of Object.values(json.Resources)) assert.ok(allowed.has(r.Type), `Unlisted resource ${r.Type}`);

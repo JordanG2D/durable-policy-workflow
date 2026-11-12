@@ -68,6 +68,22 @@ export async function outputs() {
   if (!stack || !['CREATE_COMPLETE', 'UPDATE_COMPLETE'].includes(stack.StackStatus)) throw new Error('Demo stack is not ready.');
   return Object.fromEntries((stack.Outputs || []).map(x => [x.OutputKey, x.OutputValue]));
 }
+export function notificationThresholdUsd(notification, { verifiedLegacyBudgetName } = {}) {
+  const { Threshold: threshold, ThresholdType: type } = notification;
+  if (!Number.isFinite(threshold)) return Number.NaN;
+  // On 2026-11-12 this named budget's ACTUAL/GREATER_THAN alerts were verified in
+  // the console as 50/80/100 percent while its API omitted ThresholdType. This is
+  // a narrow compatibility mapping, NOT a general API default. Callers supply the
+  // context only after validating the account-wide monthly USD5 budget.
+  // AWS documents an optional type and legacy percentage wording, not a guarantee:
+  // https://docs.aws.amazon.com/cli/latest/reference/budgets/describe-notifications-for-budget.html
+  if (type === undefined && verifiedLegacyBudgetName === 'portfolio-demo-budget' &&
+      notification.NotificationType === 'ACTUAL' && notification.ComparisonOperator === 'GREATER_THAN' &&
+      [50, 80, 100].includes(threshold)) return threshold * 5 / 100;
+  if (type === 'PERCENTAGE') return threshold * 5 / 100;
+  if (type === 'ABSOLUTE_VALUE') return threshold;
+  return Number.NaN; // Unknown explicit values, including null, fail closed.
+}
 // Budget alerts are a warning, not a spend cap. Run before any deployment write.
 export async function requireBudget() {
   assertScope();
@@ -86,7 +102,7 @@ export async function requireBudget() {
   const diagnostics = [];
   const enumValue = (value, allowed) => value === undefined ? 'MISSING' : allowed.includes(value) ? value : 'UNKNOWN';
   for (const Notification of Notifications) {
-    const amount = Notification.ThresholdType === 'PERCENTAGE' ? Number(Notification.Threshold) * 5 / 100 : Number(Notification.Threshold);
+    const amount = notificationThresholdUsd(Notification, { verifiedLegacyBudgetName: BudgetName });
     const { Subscribers = [] } = await awsRead(budgets, new DescribeSubscribersForNotificationCommand({ AccountId, BudgetName, Notification }));
     diagnostics.push({
       notificationType: enumValue(Notification.NotificationType, ['ACTUAL', 'FORECASTED']),

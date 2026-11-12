@@ -16,6 +16,7 @@ import { CloudWatchClient, DescribeAlarmsCommand } from '@aws-sdk/client-cloudwa
 import { ApiGatewayV2Client, GetApisCommand } from '@aws-sdk/client-apigatewayv2';
 import { SchedulerClient, ListSchedulesCommand } from '@aws-sdk/client-scheduler';
 import { IAMClient, ListRolesCommand } from '@aws-sdk/client-iam';
+import demoAlarmNames from './alarm-names.json' with { type: 'json' };
 import { assertScope, awsRead, cfn, outputs, poll, prefix, readStack, region, reportError, requireBudget, stackName } from './common.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
@@ -58,13 +59,21 @@ async function publishAssets(bucket) {
     }
   }
 }
-async function deploy() {
+export async function prepareDeployment() {
   await requireBudget(); // No writes, including asset uploads, precede this guard.
   const { bucket, role } = await bootstrap();
-  synth();
-  await publishAssets(bucket);
   const prior = await readStack();
   if (prior && !['CREATE_COMPLETE','UPDATE_COMPLETE','UPDATE_ROLLBACK_COMPLETE'].includes(prior.StackStatus)) throw new Error('Existing stack needs inspection or destruction before deployment.');
+  // Prove cleanup inventory is readable with this role before uploading or creating.
+  // Existing runtime resources are expected during updates; orphaned resources are not.
+  const existing = await residuals(bucket);
+  if (!prior && existing.length) throw new Error(`Demo resources remain without a runtime stack: ${existing.join(', ')}. Inspect or clean up before deployment.`);
+  return { bucket, role, prior };
+}
+async function deploy() {
+  const { bucket, role, prior } = await prepareDeployment();
+  synth();
+  await publishAssets(bucket);
   const ChangeSetName = `demo-${Date.now()}`;
   const template = readFileSync(templateFile, 'utf8');
   let location = { TemplateBody: template };
@@ -124,11 +133,9 @@ async function residuals(bucket) {
   const filter = [{ Name: 'tag:Project', Values: ['PolicyDemo'] }];
   if ((await collect(ec2, DescribeVpcEndpointsCommand, { Filters: filter }, 'VpcEndpoints')).length) found.push('VPC endpoint');
   const vpcs = await collect(ec2, DescribeVpcsCommand, { Filters: filter }, 'Vpcs');
-  if (vpcs.length) {
-    found.push('VPC');
-    const enis = await collect(ec2, DescribeNetworkInterfacesCommand, { Filters: [{ Name: 'vpc-id', Values: vpcs.map(x => x.VpcId) }] }, 'NetworkInterfaces');
-    if (enis.length) found.push('network interface');
-  }
+  if (vpcs.length) found.push('VPC');
+  const enis = await collect(ec2, DescribeNetworkInterfacesCommand, { Filters: vpcs.length ? [{ Name: 'vpc-id', Values: vpcs.map(x => x.VpcId) }] : filter }, 'NetworkInterfaces');
+  if (enis.length) found.push('network interface');
   const functions = await collect(new LambdaClient({ region }), ListFunctionsCommand, {}, 'Functions', 'Marker', 'NextMarker');
   if (functions.some(x => x.FunctionName?.startsWith(prefix))) found.push('Lambda function');
   const mappings = await collect(new LambdaClient({ region }), ListEventSourceMappingsCommand, {}, 'EventSourceMappings', 'Marker', 'NextMarker');
@@ -137,7 +144,7 @@ async function residuals(bucket) {
   if (apis.some(x => x.Name?.startsWith(prefix) || x.Tags?.Project === 'PolicyDemo')) found.push('HTTP API');
   if ((await collect(new SchedulerClient({ region }), ListSchedulesCommand, { NamePrefix: prefix }, 'Schedules')).length) found.push('Scheduler schedule');
   const cw = new CloudWatchClient({ region });
-  if ((await collect(cw, DescribeAlarmsCommand, { AlarmNamePrefix: prefix }, 'MetricAlarms')).length) found.push('CloudWatch alarm');
+  if ((await collect(cw, DescribeAlarmsCommand, { AlarmNames: demoAlarmNames, AlarmTypes: ['MetricAlarm'] }, 'MetricAlarms')).length) found.push('CloudWatch alarm');
   if ((await collect(new IAMClient({ region }), ListRolesCommand, { PathPrefix: '/policy-demo/runtime/' }, 'Roles', 'Marker')).length) found.push('runtime IAM role');
   const sqs = new SQSClient({ region });
   if ((await collect(sqs, ListQueuesCommand, { QueueNamePrefix: prefix, MaxResults: 1000 }, 'QueueUrls')).length) found.push('SQS queue');
@@ -193,11 +200,13 @@ function diff() {
   synth();
   execFileSync('npm', ['exec', '--', 'cdk', 'diff', stackName, '--app', assembly, '--template', resolve(base), '--no-change-set', '--no-lookups'], { cwd: resolve(root, 'infra'), stdio: 'inherit', env: { ...process.env, CDK_DISABLE_VERSION_CHECK: '1' } });
 }
-const action = process.argv[2];
-try {
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+ const action = process.argv[2];
+ try {
   if (action === 'deploy') await deploy();
   else if (action === 'destroy') await destroy();
   else if (action === 'verify-clean') await verifyClean();
   else if (action === 'diff') diff();
   else throw new Error('Usage: operate.mjs deploy|destroy|verify-clean|diff');
-} catch (error) { reportError(error); }
+ } catch (error) { reportError(error); }
+}

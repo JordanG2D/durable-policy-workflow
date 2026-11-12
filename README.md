@@ -697,6 +697,21 @@ npm run aws:smoke
 npm run aws:destroy
 ```
 
+Before any asset upload or resource write, deploy validates the $5 budget and
+bootstrap, then runs the same read-only inventory used to verify cleanup. A denied
+inventory read stops deployment with a sanitized service/action/error code.
+Existing resources are allowed for a healthy stack update; resources found without
+their runtime stack must be inspected or cleaned up first.
+
+For `portfolio-demo-budget`, the console-confirmed ACTUAL/GREATER_THAN alerts at
+50%, 80%, and 100% ($2.50/$4/$5) have returned an omitted `ThresholdType` through
+the API. The guard recognizes only that verified budget/alert combination as a
+percentage compatibility case. Other omitted or unknown types fail closed;
+explicit percentage and absolute-value alerts retain their stated meaning.
+[AWS's API documentation](https://docs.aws.amazon.com/cli/latest/reference/budgets/describe-notifications-for-budget.html)
+marks the type optional and retains legacy percentage wording, but does not
+explicitly guarantee a general omitted-type default. The guard does not assume one.
+
 Deploy invokes the migration Lambda twice. Migrations take a transaction-scoped
 advisory lock, hash the exact identity/SQL bytes, reject changed or unknown
 history, and skip already applied migrations. Only the exact original legacy
@@ -731,6 +746,14 @@ of interpreting `DELETE_COMPLETE` alone as proof. The stack never configures
 cross-region backup replication; if that changes, its backups must also be
 included in cleanup. Residuals or inaccessible inventory fail the command and
 need inspection. Never delete unrelated account resources to make a check pass.
+
+Alarm verification reads exactly the three metric-alarm names in
+`scripts/aws/alarm-names.json`, rather than enumerating an arbitrary name prefix.
+An infrastructure test requires that list to equal the synthesized alarm names.
+This covers this stack's fixed alarm inventory, not additional manually created
+alarms. [CloudWatch's authorization reference](https://docs.aws.amazon.com/service-authorization/latest/reference/list_cloudwatch.html)
+supports alarm-resource scoping; the preflight verifies that the actual role can
+perform the exact-name read without widening IAM permissions.
 
 The empty bootstrap bucket, IAM/OIDC setup and budget deliberately remain for
 future manual demos; none has a recurring base charge once the bucket is empty.
