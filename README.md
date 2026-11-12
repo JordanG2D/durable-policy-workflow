@@ -230,7 +230,7 @@ starts its span from that context, so retries and crash recovery appear in the s
 
 ## How this was built
 
-This project was built with AI coding agents (Claude Code / Codex) working under human
+This project was built with AI coding agents (Claude Code) working under human
 direction. The human set the requirements, the design constraints and the bar for
 evidence. All code was verified by the test suite in this repository, including the
 fault-injection tests that kill real processes. Nothing here was accepted because it
