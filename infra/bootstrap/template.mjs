@@ -81,6 +81,7 @@ export const template = {
       allow(['secretsmanager:CreateSecret','secretsmanager:DeleteSecret','secretsmanager:DescribeSecret','secretsmanager:GetSecretValue','secretsmanager:PutSecretValue','secretsmanager:UpdateSecret','secretsmanager:TagResource','secretsmanager:UntagResource','secretsmanager:GetResourcePolicy','secretsmanager:PutResourcePolicy','secretsmanager:DeleteResourcePolicy'], secrets),
       allow(['secretsmanager:GetRandomPassword'], '*', region),
       allow(['lambda:CreateFunction','lambda:UpdateFunctionCode','lambda:UpdateFunctionConfiguration','lambda:DeleteFunction','lambda:GetFunction','lambda:GetFunctionConfiguration','lambda:AddPermission','lambda:RemovePermission','lambda:GetPolicy','lambda:TagResource','lambda:UntagResource','lambda:ListTags','lambda:PutFunctionConcurrency','lambda:DeleteFunctionConcurrency','lambda:GetFunctionConcurrency'], functions),
+      allow(['lambda:GetFunctionCodeSigningConfig','lambda:GetFunctionRecursionConfig','lambda:GetRuntimeManagementConfig','lambda:GetFunctionScalingConfig'], functions),
       // Read tags before/after CFN tag propagation; UUIDs are service-generated.
       // A Project tag condition could block the initial stabilization lookup.
       allow(['lambda:ListTags'], arn('lambda','event-source-mapping:*'), region),
@@ -114,6 +115,12 @@ export const template = {
       // Reviewed recovery exception: observed encoded HTTP API tagging path.
       // Request-tag conditions fail closed; live propagation still needs validation.
       allow(['apigateway:POST'], sub('arn:${AWS::Partition}:apigateway:us-east-1::/tags/arn%3A${AWS::Partition}%3Aapigateway%3Aus-east-1%3A%3A%2Fv2%2Fapis%2F*'), {
+        StringEquals: { 'aws:RequestTag/Project': 'PolicyDemo' },
+        'ForAllValues:StringLike': { 'aws:TagKeys': ['Project', 'aws:cloudformation:*'] },
+      }),
+      // Approved recovery exception: observed stage-collection tag authorization.
+      // Fail closed until request-tag condition propagation is validated live.
+      allow(['apigateway:TagResource'], sub('arn:${AWS::Partition}:apigateway:us-east-1::/apis/*/stages'), {
         StringEquals: { 'aws:RequestTag/Project': 'PolicyDemo' },
         'ForAllValues:StringLike': { 'aws:TagKeys': ['Project', 'aws:cloudformation:*'] },
       }),

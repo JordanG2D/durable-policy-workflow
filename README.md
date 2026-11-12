@@ -594,6 +594,31 @@ approval for the amount accepted by that form and confirm the increase is applie
 in us-east-1 before deploying. Keep the function caps in place rather than removing
 them to bypass the quota check.
 
+**Approved stage-tagging recovery permission:** the bootstrap adds only
+`apigateway:TagResource` on `arn:${AWS::Partition}:apigateway:us-east-1::/apis/*/stages`
+(with no trailing `/*`), requiring requested `Project=PolicyDemo` and tag keys
+limited to Project or CloudFormation system keys. This wildcard covers stage
+collections under other HTTP APIs in us-east-1. Request-tag propagation for this
+literal action is not fully documented: the conditions fail closed and have not
+been validated in a successful live run. This is not a grant for route/integration
+tags or untagging. The owner approved this exact persistent permission; review its
+scope before applying and obtain fresh approval for material changes. No resources
+are added.
+
+**Approved Lambda configuration reads:** CloudFormation can inspect code-signing,
+recursion, runtime-management and scaling configuration using exactly
+`lambda:GetFunctionCodeSigningConfig`, `lambda:GetFunctionRecursionConfig`,
+`lambda:GetRuntimeManagementConfig` and `lambda:GetFunctionScalingConfig`, limited
+to functions named `policy-demo-*` in the stack account/region. These permissions
+are read-only and do not add function changes, resources or untag permissions.
+
+**Approved RDS prerequisite:** AWS may automatically create the account-wide
+`AWSServiceRoleForRDS` service-linked role so RDS can manage supporting resources.
+The owner explicitly approved that prerequisite. It has no separate recurring
+charge and persists in the account after demo teardown. Creation has not yet
+been observed. The existing bootstrap permission already covers that exact role;
+this proposal does not add or expand the service-linked-role grant.
+
 **Reviewed recovery permissions:** the bootstrap includes two separate recovery
 exceptions approved by the owner for this demo. Review their exact scope and risks
 before applying; any material change requires fresh persistent-access approval.
