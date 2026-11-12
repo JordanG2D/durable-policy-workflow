@@ -9,7 +9,7 @@ import {
 } from "@opentelemetry/api";
 import { W3CTraceContextPropagator } from "@opentelemetry/core";
 import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http";
-import { resourceFromAttributes } from "@opentelemetry/resources";
+import { resourceFromAttributes, type Resource } from "@opentelemetry/resources";
 import {
   BatchSpanProcessor,
   SimpleSpanProcessor,
@@ -27,6 +27,8 @@ import { NodeTracerProvider } from "@opentelemetry/sdk-trace-node";
  */
 
 let provider: NodeTracerProvider | undefined;
+let processors: SpanProcessor[] = [];
+let resource: Resource | undefined;
 
 export function initTracing(opts: {
   serviceName: string;
@@ -43,16 +45,26 @@ export function initTracing(opts: {
       ),
     );
   }
-  provider = new NodeTracerProvider({
-    resource: resourceFromAttributes({ "service.name": opts.serviceName }),
-    spanProcessors,
-  });
+  processors = spanProcessors;
+  resource = resourceFromAttributes({ "service.name": opts.serviceName });
+  provider = new NodeTracerProvider({ resource, spanProcessors });
   provider.register({ propagator: new W3CTraceContextPropagator() });
 }
 
 export async function shutdownTracing(): Promise<void> {
   await provider?.shutdown();
   provider = undefined;
+  processors = [];
+  resource = undefined;
+}
+
+/**
+ * The span processors and resource registered by `initTracing`, for spans
+ * that are created outside the global tracer provider and handed over already
+ * finished (Temporal exports workflow-sandbox spans this way).
+ */
+export function registeredSpanProcessors(): { processors: readonly SpanProcessor[]; resource: Resource | undefined } {
+  return { processors, resource };
 }
 
 export const tracer = () => trace.getTracer("policy-workflow");

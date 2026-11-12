@@ -9,6 +9,9 @@
     },
     {
       "path": "packages/handbuilt"
+    },
+    {
+      "path": "packages/temporal"
     }
   ]
 }

@@ -8,7 +8,8 @@
   "workspaces": [
     "packages/domain",
     "packages/parity",
-    "packages/handbuilt"
+    "packages/handbuilt",
+    "packages/temporal"
   ],
   "scripts": {
     "build": "tsc -b",
