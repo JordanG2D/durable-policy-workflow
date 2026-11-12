@@ -164,10 +164,10 @@ npm run typecheck && npm run lint && npm test
 outbox, idempotency, API, fault-injection and parity suites against real Postgres. The
 crash tests spawn real worker processes.
 
-`npm run test:temporal` runs the Temporal parity, workflow and replay suites on Temporal's
-time-skipping test server, which the SDK downloads on first use. Some sandboxes and
-corporate networks block that download. In that case, run the suites against the dev
-server from compose instead:
+`npm run test:temporal` runs the Temporal parity, workflow and replay suites in Temporal's
+standard time-skipping test environment, which the SDK downloads on first use. The same
+suites also run against a real Temporal server, the dev server from compose (the one test
+that needs time skipping is skipped there):
 
 ```bash
 docker compose --profile temporal up -d --wait temporal

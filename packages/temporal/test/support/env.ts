@@ -20,18 +20,17 @@ export async function withTimeout<T>(p: Promise<T>, ms: number, what: string): P
 export const TEST_SERVER_START_TIMEOUT_MS = Number(process.env.TEMPORAL_TEST_SERVER_START_TIMEOUT_MS ?? 90_000);
 
 /**
- * The Temporal service the tests run against, in order of preference:
+ * The Temporal service the tests run against:
  *
- * 1. TEMPORAL_ADDRESS set: an already running server, normally the dev server
- *    from `docker compose --profile temporal up temporal`. No time skipping,
- *    so tests that only make sense with it are skipped.
- * 2. Otherwise Temporal's time-skipping test server, an in-memory service
- *    whose clock jumps forward whenever every workflow is waiting on a timer.
- *    The SDK downloads it on first use; TEMPORAL_TEST_SERVER_PATH can point at
- *    an existing executable instead.
+ * - By default, Temporal's standard time-skipping test environment
+ *   (TestWorkflowEnvironment.createTimeSkipping): an in-memory service whose
+ *   clock jumps forward whenever every workflow is waiting on a timer.
+ * - With TEMPORAL_ADDRESS set, a real Temporal server instead (normally the
+ *   dev server from `docker compose --profile temporal up temporal`), to check
+ *   behaviour the test server does not model exactly. Tests that need time
+ *   skipping are skipped there.
  *
- * Startup has a hard deadline: a blocked download fails the run with a
- * message instead of hanging it.
+ * Startup has a hard deadline, so it fails with a message instead of hanging.
  */
 export function createTestEnv(): Promise<TestWorkflowEnvironment> {
   // Expected failures (retries, dead-letters) are the point of these tests; only print real errors.
@@ -49,14 +48,9 @@ export function createTestEnv(): Promise<TestWorkflowEnvironment> {
       `connecting to the Temporal server at ${address}`,
     );
   }
-  const path = process.env.TEMPORAL_TEST_SERVER_PATH;
   return withTimeout(
-    TestWorkflowEnvironment.createTimeSkipping({
-      ...(path ? { server: { executable: { type: "existing-path", path } } } : {}),
-      client,
-    }),
+    TestWorkflowEnvironment.createTimeSkipping({ client }),
     TEST_SERVER_START_TIMEOUT_MS,
-    "starting Temporal's time-skipping test server (if its download is blocked, run the dev server with " +
-      "`docker compose --profile temporal up -d temporal` and set TEMPORAL_ADDRESS=localhost:7233)",
+    "starting Temporal's time-skipping test environment",
   );
 }
