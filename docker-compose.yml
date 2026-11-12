@@ -1,5 +1,8 @@
-# One command: `docker compose up --build`
-# API on http://localhost:3000, two workers, Postgres, and the fake payment/document services.
+# Hand-built stack, one command: `docker compose up --build`
+#   API on http://localhost:3000, two workers, Postgres, and the fake payment/document/policy services.
+# Temporal stack as well: `docker compose --profile temporal up --build`
+#   adds the Temporal dev server (gRPC :7233, Web UI http://localhost:8233), its API on
+#   http://localhost:3100 and two Temporal workers. Both stacks share the fakes.
 name: policy-workflow
 
 x-app: &app
@@ -48,7 +51,8 @@ services:
       # Example: FAKE_PAYMENT_FAULTS='{"responseDelayMs":3000}' docker compose up
       FAKE_PAYMENT_FAULTS: ${FAKE_PAYMENT_FAULTS:-}
       FAKE_DOCUMENT_FAULTS: ${FAKE_DOCUMENT_FAULTS:-}
-    ports: ["4001:4001", "4002:4002"]
+      FAKE_POLICY_FAULTS: ${FAKE_POLICY_FAULTS:-}
+    ports: ["4001:4001", "4002:4002", "4003:4003"]
 
   # ---- Temporal implementation (opt in: `docker compose --profile temporal up`) ----
   temporal:
@@ -62,6 +66,49 @@ services:
       interval: 2s
       timeout: 5s
       retries: 30
+
+  temporal-api:
+    profiles: ["temporal"]
+    build:
+      context: .
+      dockerfile: Dockerfile.temporal
+    image: durable-policy-workflow-temporal:local
+    command: ["node", "packages/temporal/dist/src/main-api.js"]
+    restart: unless-stopped
+    depends_on:
+      temporal:
+        condition: service_healthy
+    environment: &temporal-env
+      TEMPORAL_ADDRESS: temporal:7233
+      PORT: "3100"
+      PAYMENT_PROVIDER_URL: http://fakes:4001
+      DOCUMENT_SERVICE_URL: http://fakes:4002
+      POLICY_REGISTRY_URL: http://fakes:4003
+      PAYMENT_CALLBACK_URL: http://temporal-api:3100/webhooks/payments
+      LOG_LEVEL: info
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+    ports: ["3100:3100"]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3100/readyz').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  temporal-worker:
+    profiles: ["temporal"]
+    image: durable-policy-workflow-temporal:local
+    command: ["node", "packages/temporal/dist/src/main-worker.js"]
+    restart: unless-stopped
+    depends_on:
+      temporal:
+        condition: service_healthy
+      temporal-api:
+        condition: service_started
+      fakes:
+        condition: service_started
+    environment: *temporal-env
+    deploy:
+      replicas: 2
 
   api:
     <<: *app

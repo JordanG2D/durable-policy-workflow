@@ -4,13 +4,18 @@ FROM node:22-slim AS build
 WORKDIR /app
 COPY package.json package-lock.json tsconfig.base.json tsconfig.json ./
 COPY packages/domain/package.json packages/domain/
+COPY packages/parity/package.json packages/parity/
 COPY packages/handbuilt/package.json packages/handbuilt/
-RUN npm ci --include-workspace-root -w @policy/domain -w @policy/handbuilt
+RUN npm ci --include-workspace-root -w @policy/domain -w @policy/parity -w @policy/handbuilt
 COPY packages/domain/tsconfig.json packages/domain/
 COPY packages/domain/src packages/domain/src
+COPY packages/parity/tsconfig.json packages/parity/
+COPY packages/parity/src packages/parity/src
 COPY packages/handbuilt/tsconfig.json packages/handbuilt/
 COPY packages/handbuilt/src packages/handbuilt/src
-RUN npx tsc -b packages/handbuilt \
+# Tests are not in the build context; compile only the sources.
+RUN sed -i 's#"include": \["src", "test"\]#"include": ["src"]#' packages/handbuilt/tsconfig.json \
+  && npx tsc -b packages/handbuilt \
   && npm prune --omit=dev --include-workspace-root -w @policy/domain -w @policy/handbuilt
 
 FROM node:22-slim

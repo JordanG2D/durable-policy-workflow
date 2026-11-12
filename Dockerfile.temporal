@@ -1,0 +1,35 @@
+# syntax=docker/dockerfile:1
+# Temporal implementation image: runs the API (main-api.js) or the worker (main-worker.js). See compose profile "temporal".
+FROM node:22-slim AS build
+WORKDIR /app
+COPY package.json package-lock.json tsconfig.base.json tsconfig.json ./
+COPY packages/domain/package.json packages/domain/
+COPY packages/parity/package.json packages/parity/
+COPY packages/temporal/package.json packages/temporal/
+RUN npm ci --include-workspace-root -w @policy/domain -w @policy/parity -w @policy/temporal
+COPY packages/domain/tsconfig.json packages/domain/
+COPY packages/domain/src packages/domain/src
+COPY packages/parity/tsconfig.json packages/parity/
+COPY packages/parity/src packages/parity/src
+COPY packages/temporal/tsconfig.json packages/temporal/
+COPY packages/temporal/src packages/temporal/src
+# Tests are not in the build context; compile only the sources.
+RUN sed -i 's#"include": \["src", "test"\]#"include": ["src"]#' packages/temporal/tsconfig.json \
+  && npx tsc -b packages/temporal \
+  && cd packages/temporal && node dist/src/bundle-cli.js dist/workflow-bundle.js \
+  && cd /app && npm prune --omit=dev --include-workspace-root -w @policy/domain -w @policy/temporal
+
+FROM node:22-slim
+ENV NODE_ENV=production
+WORKDIR /app
+COPY --from=build /app/package.json ./
+COPY --from=build /app/node_modules ./node_modules
+COPY --from=build /app/packages/domain/package.json ./packages/domain/
+COPY --from=build /app/packages/domain/dist/src ./packages/domain/dist/src
+COPY --from=build /app/packages/temporal/package.json ./packages/temporal/
+COPY --from=build /app/packages/temporal/dist/src ./packages/temporal/dist/src
+COPY --from=build /app/packages/temporal/dist/workflow-bundle.js ./packages/temporal/dist/workflow-bundle.js
+ENV WORKFLOW_BUNDLE_PATH=/app/packages/temporal/dist/workflow-bundle.js
+USER node
+EXPOSE 3100
+CMD ["node", "packages/temporal/dist/src/main-api.js"]
