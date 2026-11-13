@@ -11,6 +11,7 @@ const readContexts = {
   DescribeNotificationsForBudget: ['Budgets', 'budget notifications'],
   DescribeSubscribersForNotification: ['Budgets', 'budget subscribers'],
   DescribeStacks: ['CloudFormation', 'stack inventory'],
+  ListStackResources: ['CloudFormation', 'stack resource inventory'],
   DescribeDBInstances: ['RDS', 'database instances'],
   DescribeDBSnapshots: ['RDS', 'database snapshots'],
   DescribeDBInstanceAutomatedBackups: ['RDS', 'automated backups'],

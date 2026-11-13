@@ -4,7 +4,7 @@ import { readFileSync, mkdtempSync, rmSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { CreateChangeSetCommand, DescribeChangeSetCommand, ExecuteChangeSetCommand, DeleteChangeSetCommand, DeleteStackCommand } from '@aws-sdk/client-cloudformation';
+import { CreateChangeSetCommand, DescribeChangeSetCommand, ExecuteChangeSetCommand, DeleteChangeSetCommand } from '@aws-sdk/client-cloudformation';
 import { S3Client, PutObjectCommand, ListObjectsV2Command, DeleteObjectsCommand } from '@aws-sdk/client-s3';
 import { LambdaClient, InvokeCommand, ListFunctionsCommand, ListEventSourceMappingsCommand } from '@aws-sdk/client-lambda';
 import { RDSClient, DescribeDBInstancesCommand, DescribeDBSnapshotsCommand, DescribeDBInstanceAutomatedBackupsCommand, DescribeDBSubnetGroupsCommand } from '@aws-sdk/client-rds';
@@ -17,6 +17,7 @@ import { ApiGatewayV2Client, GetApisCommand } from '@aws-sdk/client-apigatewayv2
 import { SchedulerClient, ListSchedulesCommand } from '@aws-sdk/client-scheduler';
 import { IAMClient, ListRolesCommand } from '@aws-sdk/client-iam';
 import demoAlarmNames from './alarm-names.json' with { type: 'json' };
+import { deleteRuntimeStack } from './cleanup-recovery.mjs';
 import { assertScope, awsRead, cfn, outputs, poll, prefix, readStack, region, reportError, requireBudget, stackName } from './common.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
@@ -165,19 +166,13 @@ async function cleanAssets(bucket) {
     if (result.Errors?.length) throw new Error('Some demo asset objects could not be removed.');
   }
 }
-async function destroy() {
+export async function destroy() {
   assertScope(); // Cleanup must remain available if budget checks or deployment fail.
   const { bucket, role } = await bootstrap();
   const failures = [];
   try {
-    const stack = await readStack();
-    if (stack) {
-      if (stack.Tags?.find(t => t.Key === 'Project')?.Value !== 'PolicyDemo') throw new Error('Refusing to delete an untagged/unrecognized stack.');
-      if (/_IN_PROGRESS$/.test(stack.StackStatus)) await poll('Pending stack operation', readStack, x => !x || !/_IN_PROGRESS$/.test(x.StackStatus), { timeoutMs: 2_400_000 });
-      if (await readStack()) await cfn().send(new DeleteStackCommand({ StackName: stackName, RoleARN: role }));
-      await poll('Runtime destruction', readStack, x => { if (x?.StackStatus === 'DELETE_FAILED') throw new Error('Stack deletion failed. Residual resources require inspection.'); return !x; }, { timeoutMs: 2_400_000 });
-    }
-  } catch (error) { failures.push(error.name === 'SafeAwsReadError' ? error.message : 'runtime stack deletion failed or timed out'); }
+    await deleteRuntimeStack(role);
+  } catch (error) { failures.push(['SafeAwsReadError', 'CleanupRecoveryError'].includes(error.name) ? error.message : 'runtime stack deletion failed or timed out'); }
   // Still remove only dedicated-prefix assets and inventory residuals after a stack failure.
   try { await cleanAssets(bucket); } catch (error) { failures.push(error.name === 'SafeAwsReadError' ? error.message : 'asset cleanup failed'); }
   try { await verifyClean(bucket, failures.length === 0); } catch (error) { failures.push(error.$metadata ? 'residual inventory could not be completed' : error.message); }

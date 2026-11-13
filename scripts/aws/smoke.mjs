@@ -4,6 +4,7 @@ import { defaultProvider } from '@aws-sdk/credential-provider-node';
 import { SQSClient, SendMessageCommand, ReceiveMessageCommand, DeleteMessageCommand } from '@aws-sdk/client-sqs';
 import { CloudWatchClient, DescribeAlarmsCommand } from '@aws-sdk/client-cloudwatch';
 import { outputs, region, poll, reportError } from './common.mjs';
+import { assertIdempotentReplay } from './smoke-assertions.mjs';
 
 const hash = value => createHash('sha256').update(value).digest('hex');
 const hmac = (key, value) => createHmac('sha256', key).update(value).digest();
@@ -47,7 +48,7 @@ async function main() {
   }, { timeoutMs: 900_000, intervalMs: 10_000 });
   if (!String(completed.paymentChargeId).startsWith('demo-payment-') || !String(completed.documentDeliveryId).startsWith('demo-document-')) throw new Error('Expected synthetic-only effects.');
   const replay = await request(api, '/v1/policy-applications', 'POST', payload, token);
-  if (replay.replayed !== 'true' || JSON.stringify(replay.body) !== JSON.stringify(created.body)) throw new Error('Idempotent replay did not return the original response.');
+  assertIdempotentReplay(created, replay);
   const afterReplay = (await request(api, path, 'GET')).body;
   if (afterReplay.paymentChargeId !== completed.paymentChargeId || afterReplay.documentDeliveryId !== completed.documentDeliveryId || afterReplay.state !== completed.state || JSON.stringify(afterReplay.transitions) !== JSON.stringify(completed.transitions)) throw new Error('Replay changed durable policy effects or transitions.');
   console.log('Synthetic policy delivered; replay preserved effects and transitions.');
