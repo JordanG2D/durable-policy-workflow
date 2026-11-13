@@ -500,6 +500,26 @@ it is not a claim that automated teardown passed. Intentional bootstrap resource
 and the RDS service-linked role are retained; console-template staging is
 preserved separately from runtime cleanup.
 
+**Live alarm evidence from the subsequent run:**
+[run 43348718597](https://github.com/JordanG2D/durable-policy-workflow/actions/runs/43348718597)
+passed the full smoke test again. These genuine console captures show the healthy
+alarms followed by the DLQ transition to **ALARM at 02:24:16 UTC on 13 November
+2026**, after native redrive of the injected poison message. Automatic teardown
+started at 02:24:26; this run's cleanup outcome is not yet verified. The prior
+run's verified manual recovery above remains separate.
+
+Healthy state before the injected failure:
+
+![Healthy alarms for run 43348718597: Lambda error-rate, DLQ and outbox OK](docs/evidence/aws-run-43348718597-healthy-alarms.jpg)
+
+DLQ alarm after the injected failure:
+
+![DLQ ALARM at 02:24:16 UTC for run 43348718597](docs/evidence/aws-run-43348718597-dlq-alarm.jpg)
+
+The [initialization capture](docs/evidence/aws-run-43348718597-initial-alarms.jpg)
+is also retained: Lambda error-rate was initially **Insufficient data**, while
+DLQ and outbox alarms were **OK**.
+
 ```mermaid
 flowchart LR
   Client[Signed IAM demo client] --> HTTP[HTTP API]
@@ -563,6 +583,12 @@ Sources: [RDS](https://aws.amazon.com/rds/postgresql/pricing/),
 billing rounds partial endpoint-hours up; RDS has a minimum charge when an
 instance is started. A short session is much cheaper than leaving it running,
 but there is no automatic hard dollar cap.
+
+**Observed run-cost evidence:** AWS Bills refreshed at 01:51:33 UTC on
+13 November 2026 showed a November estimated grand total of **USD 0.00**, with
+status **Pending**. RDS/VPC usage was not yet reflected; this is neither final
+cost nor evidence that the demo was free. The $5 budget remained healthy, with
+forecast unavailable. Budget alerts are delayed and are not a hard spending cap.
 
 Required cost controls:
 
