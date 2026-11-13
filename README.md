@@ -480,10 +480,59 @@ system. Only `packages/handbuilt` is deployed. Temporal stays local. Payment and
 document providers are synthetic, with idempotent effects recorded in Postgres;
 no real payment is charged or email sent. Use synthetic applicant data only.
 
-**Verification status:** the AWS adapter, migration checks, CDK synthesis, and
-local regression tests are implemented. A live deploy, cloud smoke test, visible
-alarms, and clean cloud teardown must all pass before claiming AWS qualification.
-Do not confuse offline synthesis with a successful deployment.
+**Verification status (13 November 2026, UTC):** the
+[deployment run](https://github.com/JordanG2D/durable-policy-workflow/actions/runs/43336057606)
+on main commit `8859505` passed deployment and both migration checks at 00:29:50.
+The full cloud smoke test passed at 00:47:11: synthetic policy delivery, semantic
+idempotent replay, native poison-message DLQ redrive and the DLQ alarm.
+Automated cleanup failed at 01:31:34 after guarded mapping recovery; the workflow
+run was not entirely successful. AWS subsequently released the shared Lambda
+network interface as an ordinary detached, available interface. Its exact
+demo-owned orphan was manually deleted around 01:40, and a standard CloudFormation
+retry reached `PolicyDemo` `DELETE_COMPLETE` at 01:42:08. Runtime teardown was
+verified after manual recovery: fresh console checks through approximately 01:44 found no
+demo VPC or regional network interfaces, no RDS databases, snapshots or retained
+backups, an empty application asset bucket, and only the bootstrap stack active.
+Function and event-source mapping inventories were empty at 01:39–01:40; the
+remaining categories were empty in the workflow inventory at 01:31:34, with none
+recreated afterward. This combines workflow inventory with later targeted checks;
+it is not a claim that automated teardown passed. Intentional bootstrap resources
+and the RDS service-linked role are retained; console-template staging is
+preserved separately from runtime cleanup.
+
+**Live alarm evidence from the subsequent run:**
+[run 43348718597](https://github.com/JordanG2D/durable-policy-workflow/actions/runs/43348718597)
+passed the full smoke test again. These genuine console captures show the healthy
+alarms followed by the DLQ transition to **ALARM at 02:24:16 UTC on 13 November
+2026**, after native redrive of the injected poison message. Automatic teardown
+started at 02:24:26 and failed at 03:11:37. Runtime teardown was subsequently
+verified after manual recovery, not by a successful automatic-cleanup run.
+Fresh Lambda function and event-source mapping inventories were empty before
+deleting the exact demo-owned orphan interface, which AWS had released as an
+ordinary, detached, **Available** interface. Standard CloudFormation deletion
+was retried at 04:49:27: subnet/security-group deletion completed at 04:49:31,
+VPC deletion at 04:49:33, and `PolicyDemo` reached `DELETE_COMPLETE` at 04:49:34.
+
+Fresh targeted checks through approximately 04:53 UTC confirmed the demo VPC and
+network interface absent; RDS databases, subnet groups, manual/system snapshots,
+current/retained/replicated automated backups and VPC endpoints empty; and zero
+application asset objects. Only `PolicyDemoBootstrap` remained active. Other
+runtime categories were empty in the completed, fully paginated 03:11:37 workflow
+inventory and were not recreated. Combined, these checks verify runtime teardown.
+Bootstrap resources, the RDS service-linked role, budget and console-template
+staging are intentionally preserved. The prior run's recovery above is separate.
+
+Healthy state before the injected failure:
+
+![Healthy alarms for run 43348718597: Lambda error-rate, DLQ and outbox OK](docs/evidence/aws-run-43348718597-healthy-alarms.jpg)
+
+DLQ alarm after the injected failure:
+
+![DLQ ALARM at 02:24:16 UTC for run 43348718597](docs/evidence/aws-run-43348718597-dlq-alarm.jpg)
+
+The [initialization capture](docs/evidence/aws-run-43348718597-initial-alarms.jpg)
+is also retained: Lambda error-rate was initially **Insufficient data**, while
+DLQ and outbox alarms were **OK**.
 
 ```mermaid
 flowchart LR
@@ -548,6 +597,14 @@ Sources: [RDS](https://aws.amazon.com/rds/postgresql/pricing/),
 billing rounds partial endpoint-hours up; RDS has a minimum charge when an
 instance is started. A short session is much cheaper than leaving it running,
 but there is no automatic hard dollar cap.
+
+**Observed run-cost evidence:** AWS Bills refreshed at 04:52:25 UTC on
+13 November 2026 showed a November estimated grand total of **USD 0.00**, with
+status **Pending**. Only CloudFormation, Data Transfer, SNS and S3 had posted;
+runtime RDS/VPC usage was not yet reflected. This is neither final cost nor
+evidence that the demo was free. At approximately 04:53 UTC, the $5 budget was
+Healthy/OK with $0 used and forecast unavailable. Budget alerts are delayed and
+are not a hard spending cap.
 
 Required cost controls:
 
@@ -618,9 +675,9 @@ are read-only and do not add function changes, resources or untag permissions.
 **Approved RDS prerequisite:** AWS may automatically create the account-wide
 `AWSServiceRoleForRDS` service-linked role so RDS can manage supporting resources.
 The owner explicitly approved that prerequisite. It has no separate recurring
-charge and persists in the account after demo teardown. Creation has not yet
-been observed. The existing bootstrap permission already covers that exact role;
-this proposal does not add or expand the service-linked-role grant.
+charge and persists in the account after demo teardown. The role's presence has
+been confirmed and it is retained. The existing bootstrap permission already
+covers that exact role; this does not expand the service-linked-role grant.
 
 **Reviewed recovery permissions:** the bootstrap includes two separate recovery
 exceptions approved by the owner for this demo. Review their exact scope and risks
@@ -638,9 +695,10 @@ before applying; any material change requires fresh persistent-access approval.
   keys limited to Project or CloudFormation system keys. There is no untag grant.
   This wildcard can retag another HTTP API in the region, which could enable the
   existing Project-tag-based management/delete permissions on that API. It is
-  not fully project-isolated. Request-tag conditions fail closed; their actual
-  propagation must still be validated in an approved live run. No resource-tag
-  or API-name condition is assumed for this tagging operation.
+  not fully project-isolated. Request-tag conditions fail closed. Approved live
+  deployments subsequently succeeded with these configured permissions; this
+  does not independently establish request-tag propagation for every operation.
+  No resource-tag or API-name condition is assumed for this tagging operation.
 
 These recovery permissions add no resource classes. The API operation is described by the
 [API Gateway authorization reference](https://docs.aws.amazon.com/service-authorization/latest/reference/list_apigateway.html)
@@ -782,8 +840,8 @@ confirmed that JSONB can reorder the stored response's object keys without
 changing its values. Replay verification uses deep strict equality, preserves the
 replay-header check, and checks the original HTTP status. Tests reject changed,
 missing or extra fields, changed value types and reordered arrays; durable-effect
-and transition checks remain in place. This local evidence does not establish a
-successful cloud smoke test.
+and transition checks remain in place. The subsequent cloud smoke test also
+passed, as recorded in the verification status above.
 
 SQS is a transport adapter, not a second workflow database. The scheduler sends
 due outbox event IDs without marking them complete. The worker claims the exact
@@ -812,6 +870,15 @@ after the complete regional Lambda mapping inventory proves that exact record's
 UUID is absent. It skips only the stale CloudFormation record, never a live
 mapping or another resource. IAM permissions are not broadened, and full residual
 verification must still pass before cleanup is reported complete.
+
+For a remaining Lambda network-interface orphan, follow
+[AWS's VPC networking guidance](https://docs.aws.amazon.com/lambda/latest/dg/configuration-vpc.html).
+Never force-detach or delete an in-use or Lambda-type interface. Verify exact demo
+ownership and confirm the relevant functions and event-source mappings are absent.
+Only after AWS releases it as an ordinary, detached, available interface may an
+operator perform ordinary deletion of that exact orphan. Then retry standard
+CloudFormation deletion and repeat the full residual inventory. This manual
+recovery does not turn a failed automated-cleanup run into a successful one.
 
 Alarm verification reads exactly the three metric-alarm names in
 `scripts/aws/alarm-names.json`, rather than enumerating an arbitrary name prefix.
