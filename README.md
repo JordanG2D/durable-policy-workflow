@@ -480,10 +480,25 @@ system. Only `packages/handbuilt` is deployed. Temporal stays local. Payment and
 document providers are synthetic, with idempotent effects recorded in Postgres;
 no real payment is charged or email sent. Use synthetic applicant data only.
 
-**Verification status:** the AWS adapter, migration checks, CDK synthesis, and
-local regression tests are implemented. A live deploy, cloud smoke test, visible
-alarms, and clean cloud teardown must all pass before claiming AWS qualification.
-Do not confuse offline synthesis with a successful deployment.
+**Verification status (13 November 2026, UTC):** the
+[deployment run](https://github.com/JordanG2D/durable-policy-workflow/actions/runs/43336057606)
+on main commit `8859505` passed deployment and both migration checks at 00:29:50.
+The full cloud smoke test passed at 00:47:11: synthetic policy delivery, semantic
+idempotent replay, native poison-message DLQ redrive and the DLQ alarm.
+Automated cleanup failed at 01:31:34 after guarded mapping recovery; the workflow
+run was not entirely successful. AWS subsequently released the shared Lambda
+network interface as an ordinary detached, available interface. Its exact
+demo-owned orphan was manually deleted around 01:40, and a standard CloudFormation
+retry reached `PolicyDemo` `DELETE_COMPLETE` at 01:42:08. Runtime teardown was
+verified after manual recovery: fresh console checks through approximately 01:44 found no
+demo VPC or regional network interfaces, no RDS databases, snapshots or retained
+backups, an empty application asset bucket, and only the bootstrap stack active.
+Function and event-source mapping inventories were empty at 01:39–01:40; the
+remaining categories were empty in the workflow inventory at 01:31:34, with none
+recreated afterward. This combines workflow inventory with later targeted checks;
+it is not a claim that automated teardown passed. Intentional bootstrap resources
+and the RDS service-linked role are retained; console-template staging is
+preserved separately from runtime cleanup.
 
 ```mermaid
 flowchart LR
@@ -618,9 +633,9 @@ are read-only and do not add function changes, resources or untag permissions.
 **Approved RDS prerequisite:** AWS may automatically create the account-wide
 `AWSServiceRoleForRDS` service-linked role so RDS can manage supporting resources.
 The owner explicitly approved that prerequisite. It has no separate recurring
-charge and persists in the account after demo teardown. Creation has not yet
-been observed. The existing bootstrap permission already covers that exact role;
-this proposal does not add or expand the service-linked-role grant.
+charge and persists in the account after demo teardown. The role's presence has
+been confirmed and it is retained. The existing bootstrap permission already
+covers that exact role; this does not expand the service-linked-role grant.
 
 **Reviewed recovery permissions:** the bootstrap includes two separate recovery
 exceptions approved by the owner for this demo. Review their exact scope and risks
@@ -782,8 +797,8 @@ confirmed that JSONB can reorder the stored response's object keys without
 changing its values. Replay verification uses deep strict equality, preserves the
 replay-header check, and checks the original HTTP status. Tests reject changed,
 missing or extra fields, changed value types and reordered arrays; durable-effect
-and transition checks remain in place. This local evidence does not establish a
-successful cloud smoke test.
+and transition checks remain in place. The subsequent cloud smoke test also
+passed, as recorded in the verification status above.
 
 SQS is a transport adapter, not a second workflow database. The scheduler sends
 due outbox event IDs without marking them complete. The worker claims the exact
@@ -812,6 +827,15 @@ after the complete regional Lambda mapping inventory proves that exact record's
 UUID is absent. It skips only the stale CloudFormation record, never a live
 mapping or another resource. IAM permissions are not broadened, and full residual
 verification must still pass before cleanup is reported complete.
+
+For a remaining Lambda network-interface orphan, follow
+[AWS's VPC networking guidance](https://docs.aws.amazon.com/lambda/latest/dg/configuration-vpc.html).
+Never force-detach or delete an in-use or Lambda-type interface. Verify exact demo
+ownership and confirm the relevant functions and event-source mappings are absent.
+Only after AWS releases it as an ordinary, detached, available interface may an
+operator perform ordinary deletion of that exact orphan. Then retry standard
+CloudFormation deletion and repeat the full residual inventory. This manual
+recovery does not turn a failed automated-cleanup run into a successful one.
 
 Alarm verification reads exactly the three metric-alarm names in
 `scripts/aws/alarm-names.json`, rather than enumerating an arbitrary name prefix.
