@@ -505,8 +505,22 @@ preserved separately from runtime cleanup.
 passed the full smoke test again. These genuine console captures show the healthy
 alarms followed by the DLQ transition to **ALARM at 02:24:16 UTC on 13 November
 2026**, after native redrive of the injected poison message. Automatic teardown
-started at 02:24:26; this run's cleanup outcome is not yet verified. The prior
-run's verified manual recovery above remains separate.
+started at 02:24:26 and failed at 03:11:37. Runtime teardown was subsequently
+verified after manual recovery, not by a successful automatic-cleanup run.
+Fresh Lambda function and event-source mapping inventories were empty before
+deleting the exact demo-owned orphan interface, which AWS had released as an
+ordinary, detached, **Available** interface. Standard CloudFormation deletion
+was retried at 04:49:27: subnet/security-group deletion completed at 04:49:31,
+VPC deletion at 04:49:33, and `PolicyDemo` reached `DELETE_COMPLETE` at 04:49:34.
+
+Fresh targeted checks through approximately 04:53 UTC confirmed the demo VPC and
+network interface absent; RDS databases, subnet groups, manual/system snapshots,
+current/retained/replicated automated backups and VPC endpoints empty; and zero
+application asset objects. Only `PolicyDemoBootstrap` remained active. Other
+runtime categories were empty in the completed, fully paginated 03:11:37 workflow
+inventory and were not recreated. Combined, these checks verify runtime teardown.
+Bootstrap resources, the RDS service-linked role, budget and console-template
+staging are intentionally preserved. The prior run's recovery above is separate.
 
 Healthy state before the injected failure:
 
@@ -584,11 +598,13 @@ billing rounds partial endpoint-hours up; RDS has a minimum charge when an
 instance is started. A short session is much cheaper than leaving it running,
 but there is no automatic hard dollar cap.
 
-**Observed run-cost evidence:** AWS Bills refreshed at 01:51:33 UTC on
+**Observed run-cost evidence:** AWS Bills refreshed at 04:52:25 UTC on
 13 November 2026 showed a November estimated grand total of **USD 0.00**, with
-status **Pending**. RDS/VPC usage was not yet reflected; this is neither final
-cost nor evidence that the demo was free. The $5 budget remained healthy, with
-forecast unavailable. Budget alerts are delayed and are not a hard spending cap.
+status **Pending**. Only CloudFormation, Data Transfer, SNS and S3 had posted;
+runtime RDS/VPC usage was not yet reflected. This is neither final cost nor
+evidence that the demo was free. At approximately 04:53 UTC, the $5 budget was
+Healthy/OK with $0 used and forecast unavailable. Budget alerts are delayed and
+are not a hard spending cap.
 
 Required cost controls:
 
@@ -679,9 +695,10 @@ before applying; any material change requires fresh persistent-access approval.
   keys limited to Project or CloudFormation system keys. There is no untag grant.
   This wildcard can retag another HTTP API in the region, which could enable the
   existing Project-tag-based management/delete permissions on that API. It is
-  not fully project-isolated. Request-tag conditions fail closed; their actual
-  propagation must still be validated in an approved live run. No resource-tag
-  or API-name condition is assumed for this tagging operation.
+  not fully project-isolated. Request-tag conditions fail closed. Approved live
+  deployments subsequently succeeded with these configured permissions; this
+  does not independently establish request-tag propagation for every operation.
+  No resource-tag or API-name condition is assumed for this tagging operation.
 
 These recovery permissions add no resource classes. The API operation is described by the
 [API Gateway authorization reference](https://docs.aws.amazon.com/service-authorization/latest/reference/list_apigateway.html)
